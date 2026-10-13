@@ -1,0 +1,12 @@
+data/
+media/
+staticfiles/
+*.pyc
+__pycache__/
+.env
+*.sqlite3
+*.log
+.git/
+.gitignore
+docker-compose.yml
+*.bak

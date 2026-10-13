@@ -1,0 +1,45 @@
+# ===== SECRETS ET CONFIGURATION SENSIBLE =====
+.env
+*.env
+monitoring/postgres_exporter.env
+nginx/.htpasswd
+nginx/certs/
+*.pem
+*.crt
+*.key
+
+# ===== DONNÉES PERSISTANTES =====
+data/
+logs/
+media/
+staticfiles/
+partage/
+projet/
+*.sqlite3
+*.db
+
+# ===== FICHIERS DE SAUVEGARDE =====
+*.bak
+*.bak-*
+docker-compose.yml.bak
+docker-compose.yml.bak-projet
+
+# ===== CACHE PYTHON =====
+__pycache__/
+*.py[cod]
+*.pyc
+*.pyo
+*.pyd
+.Python
+venv/
+env/
+ENV/
+
+# ===== VS CODE =====
+.vscode/
+
+# ===== SYSTÈME =====
+.DS_Store
+Thumbs.db
+*.swp
+*~

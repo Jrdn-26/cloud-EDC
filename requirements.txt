@@ -1,0 +1,12 @@
+Django==5.1.4
+psycopg2-binary==2.9.10
+python-dotenv==1.0.1
+Pillow==11.1.0
+pycryptodome==3.21.0
+clamd==1.0.2
+dnspython==2.7.0
+gunicorn==23.0.0
+whitenoise==6.8.2
+psutil==6.1.0
+django-ratelimit==4.1.0
+django-redis==5.4.0
