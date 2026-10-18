@@ -1,0 +1,106 @@
+{% extends 'partage/base.html' %}
+{% load static %}
+{% block titre %}Inscription — Cloud EDC{% endblock %}
+{% block extra_css %}
+<style>
+.auth-page { min-height: calc(100vh - 200px); display: flex; align-items: flex-start; justify-content: center; gap: 2rem; padding: 1rem 0; flex-wrap: wrap; }
+.auth-card { background: white; border: 1px solid var(--border-light); border-radius: var(--radius-lg); padding: 2.2rem; box-shadow: var(--shadow-md); width: 100%; max-width: 480px; animation: fadeUp 0.5s ease; }
+.auth-sidebar { width: 320px; flex-shrink: 0; display: flex; flex-direction: column; gap: 1rem; padding-top: 0.5rem; }
+.auth-header { text-align: center; margin-bottom: 1.8rem; }
+.auth-logo-wrap { display: inline-flex; align-items: center; justify-content: center; width: 72px; height: 72px; margin-bottom: 1rem; }
+.auth-title { font-size: 1.5rem; font-weight: 800; color: var(--text-dark); margin-bottom: 0.3rem; }
+.auth-sub   { color: var(--text-muted); font-size: 0.875rem; }
+.form-row   { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+.promo-box { background: linear-gradient(135deg, var(--edc-blue), var(--edc-blue-mid)); border-radius: var(--radius); padding: 1.4rem; color: white; }
+.promo-box h4 { font-size: 0.95rem; font-weight: 700; margin-bottom: 0.8rem; color: var(--edc-orange); }
+.promo-item { display: flex; align-items: center; gap: 8px; font-size: 0.83rem; margin-bottom: 0.6rem; color: rgba(255,255,255,0.85); }
+.info-box { background: #E6F9F2; border: 1px solid #B3EDD8; border-radius: var(--radius); padding: 1rem 1.2rem; }
+.info-box h4 { font-size: 0.83rem; font-weight: 700; color: var(--edc-green-dark); margin-bottom: 0.4rem; }
+.info-box p  { font-size: 0.8rem; color: #2D6A4F; line-height: 1.5; }
+.quota-badge { background: #FFF3D6; border: 1px solid #FCDFA0; border-radius: var(--radius); padding: 0.9rem 1.2rem; display: flex; align-items: center; gap: 10px; }
+.quota-badge .qb-icon { font-size: 1.6rem; flex-shrink: 0; }
+.quota-badge .qb-text { font-size: 0.82rem; }
+.quota-badge .qb-value { font-size: 1.1rem; font-weight: 800; color: var(--edc-orange-dark); }
+.auth-footer { text-align: center; margin-top: 1.2rem; font-size: 0.875rem; color: var(--text-muted); }
+.auth-footer a { color: var(--edc-blue); font-weight: 600; text-decoration: none; }
+@keyframes fadeUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
+</style>
+{% endblock %}
+{% block contenu %}
+<div class="auth-page">
+    <div class="auth-card">
+        <div class="auth-header">
+            <div class="auth-logo-wrap">
+                <img src="{% static 'images/edc-logo.jpg' %}" alt="EDC" style="width:72px;height:72px;object-fit:contain;border-radius:12px;filter:drop-shadow(0 4px 12px rgba(27,47,110,0.4));">
+            </div>
+            <div class="auth-title">Créer un compte</div>
+            <div class="auth-sub">Rejoignez la plateforme sécurisée Cloud EDC</div>
+        </div>
+
+        <form method="post" novalidate>
+            {% csrf_token %}
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.first_name.id_for_label }}">Prénom</label>
+                    <input type="text" name="{{ form.first_name.html_name }}" id="{{ form.first_name.id_for_label }}" class="form-control" placeholder="Jean" value="{{ form.first_name.value|default:'' }}">
+                    {{ form.first_name.errors }}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.last_name.id_for_label }}">Nom</label>
+                    <input type="text" name="{{ form.last_name.html_name }}" id="{{ form.last_name.id_for_label }}" class="form-control" placeholder="Dupont" value="{{ form.last_name.value|default:'' }}">
+                    {{ form.last_name.errors }}
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.username.id_for_label }}">Identifiant</label>
+                <input type="text" name="{{ form.username.html_name }}" id="{{ form.username.id_for_label }}" class="form-control" placeholder="jean.dupont" value="{{ form.username.value|default:'' }}" autocomplete="username">
+                {{ form.username.errors }}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.email.id_for_label }}">Adresse e-mail</label>
+                <input type="email" name="{{ form.email.html_name }}" id="{{ form.email.id_for_label }}" class="form-control" placeholder="jean.dupont@edc.cm" value="{{ form.email.value|default:'' }}" autocomplete="email">
+                {{ form.email.errors }}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.password1.id_for_label }}">Mot de passe</label>
+                <input type="password" name="{{ form.password1.html_name }}" id="{{ form.password1.id_for_label }}" class="form-control" placeholder="••••••••" autocomplete="new-password">
+                {{ form.password1.errors }}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.password2.id_for_label }}">Confirmer le mot de passe</label>
+                <input type="password" name="{{ form.password2.html_name }}" id="{{ form.password2.id_for_label }}" class="form-control" placeholder="••••••••" autocomplete="new-password">
+                {{ form.password2.errors }}
+            </div>
+            {% if form.non_field_errors %}
+            <div style="background:#FFF0F0;border:1px solid #F5C6CB;border-radius:8px;padding:10px 14px;margin-bottom:1rem;color:#C0021A;font-size:0.84rem;">
+                {% for e in form.non_field_errors %}⚠ {{ e }}{% endfor %}
+            </div>
+            {% endif %}
+            <button type="submit" class="btn btn-primary btn-block btn-lg mt-2">🚀 Créer mon compte</button>
+        </form>
+        <div class="auth-footer mt-2">Déjà un compte ? <a href="{% url 'connexion' %}">Se connecter →</a></div>
+    </div>
+
+    <div class="auth-sidebar">
+        <div class="quota-badge">
+            <div class="qb-icon">💾</div>
+            <div class="qb-text">
+                <div style="font-size:0.75rem;color:var(--text-muted);font-weight:600;">OFFERT À L'INSCRIPTION</div>
+                <div class="qb-value">20 GB de stockage</div>
+            </div>
+        </div>
+        <div class="promo-box">
+            <h4>⚡ Inclus dans votre compte</h4>
+            <div class="promo-item">🔒 Chiffrement AES-256 automatique</div>
+            <div class="promo-item">🦠 Scan antivirus à chaque upload</div>
+            <div class="promo-item">🔗 Liens de partage sécurisés</div>
+            <div class="promo-item">📋 Journal d'activité complet</div>
+            <div class="promo-item">💾 20 GB de stockage sécurisé</div>
+        </div>
+        <div class="info-box">
+            <h4>✅ Vos données sont protégées</h4>
+            <p>Tous vos fichiers sont chiffrés avec AES-256 avant d'être stockés. Même l'administrateur ne peut pas lire vos fichiers en clair.</p>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,47 @@
+{% extends 'partage/base.html' %}
+{% block titre %}Journal complet — Admin Cloud EDC{% endblock %}
+{% block contenu %}
+<div class="animate-in">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem;flex-wrap:wrap;gap:1rem;">
+        <div>
+            <div style="font-size:1.4rem;font-weight:800;color:var(--edc-blue);">📋 Journal d'activité complet</div>
+            <div style="font-size:0.83rem;color:var(--text-muted);margin-top:3px;">{{ logs|length }} événement{{ logs|length|pluralize }} enregistré{{ logs|length|pluralize }}</div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <a href="{% url 'export_logs_csv' %}{% if q or action_f or periode_f or user_f %}?q={{ q }}&action={{ action_f }}&periode={{ periode_f }}&user={{ user_f }}{% endif %}"
+               class="btn btn-green btn-sm"
+               style="display:inline-flex;align-items:center;gap:6px;">
+                📥 Exporter en CSV
+            </a>
+            <a href="{% url 'admin_dashboard' %}" class="btn btn-secondary btn-sm">← Dashboard</a>
+        </div>
+    </div>
+    <div class="card" style="padding:0;">
+        <div class="table-wrapper">
+            <table>
+                <thead><tr><th>Date</th><th>Utilisateur</th><th>Action</th><th>Fichier</th><th>IP</th><th>Détail</th></tr></thead>
+                <tbody>
+                    {% for log in logs %}
+                    <tr {% if log.action == 'upload_refuse' or log.action == 'acces_refuse' %}style="background:#FFF5F5;"{% endif %}>
+                        <td style="font-size:0.78rem;color:var(--text-muted);white-space:nowrap;">{{ log.date_evenement|date:"d/m/Y H:i:s" }}</td>
+                        <td style="font-weight:600;font-size:0.85rem;">{{ log.utilisateur.username|default:"Anonyme" }}</td>
+                        <td style="font-size:0.83rem;font-weight:700;">
+                            {% if log.action == 'upload' %}<span style="color:var(--edc-green-dark);">⬆ Upload</span>
+                            {% elif log.action == 'telechargement' %}<span style="color:var(--edc-blue-mid);">⬇ Téléchargement</span>
+                            {% elif log.action == 'creation_lien' %}<span style="color:#6B4FBB;">🔗 Lien</span>
+                            {% elif log.action == 'upload_refuse' %}<span style="color:#C0021A;">🦠 Refusé</span>
+                            {% elif log.action == 'acces_refuse' %}<span style="color:#A0640A;">🚫 Accès refusé</span>
+                            {% elif log.action == 'suppression' %}<span style="color:#7A3E3E;">🗑 Suppression</span>
+                            {% else %}{{ log.get_action_display }}{% endif %}
+                        </td>
+                        <td style="font-size:0.83rem;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ log.fichier.nom_original|default:"—" }}</td>
+                        <td style="font-size:0.78rem;font-family:monospace;color:var(--text-muted);">{{ log.adresse_ip|default:"—" }}</td>
+                        <td style="font-size:0.8rem;color:var(--text-muted);">{{ log.detail|default:"—" }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

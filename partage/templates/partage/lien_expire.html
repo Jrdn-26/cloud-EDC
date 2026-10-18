@@ -1,0 +1,13 @@
+{% extends 'partage/base.html' %}
+{% block titre %}Lien expiré — Cloud EDC{% endblock %}
+{% block contenu %}
+<div style="max-width:500px;margin:4rem auto;text-align:center;" class="animate-in">
+    <div style="width:80px;height:80px;background:#FFF3D6;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:2.5rem;margin:0 auto 1.5rem;">⏰</div>
+    <h1 style="font-size:1.6rem;font-weight:800;color:var(--edc-blue);margin-bottom:0.8rem;">Lien expiré ou invalide</h1>
+    <p style="color:var(--text-muted);font-size:0.95rem;line-height:1.7;margin-bottom:2rem;">
+        Ce lien de partage a expiré, a été désactivé ou le nombre maximal de téléchargements a été atteint.<br>
+        Contactez la personne qui vous a partagé ce lien pour en obtenir un nouveau.
+    </p>
+    <a href="{% url 'accueil' %}" class="btn btn-primary">← Retour à l'accueil</a>
+</div>
+{% endblock %}

@@ -1,0 +1,90 @@
+{% extends 'partage/base.html' %}
+{% block titre %}Vérification 2FA — Cloud EDC{% endblock %}
+{% block extra_css %}
+<style>
+.otp-page { min-height: calc(100vh - 200px); display: flex; align-items: center; justify-content: center; padding: 2rem 1rem; }
+.otp-card { background: white; border: 1px solid var(--border-light); border-radius: var(--radius-lg); padding: 2.5rem 2.2rem; box-shadow: var(--shadow-md); width: 100%; max-width: 440px; animation: fadeUp 0.5s ease; text-align: center; }
+.otp-icon { width: 76px; height: 76px; background: linear-gradient(135deg, #E6F0FF, #D0E4FF); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 2.2rem; margin: 0 auto 1.3rem; border: 3px solid rgba(27,47,110,0.12); }
+.otp-title { font-size: 1.4rem; font-weight: 800; color: var(--edc-blue); margin-bottom: 0.5rem; }
+.otp-sub   { font-size: 0.875rem; color: var(--text-muted); line-height: 1.65; margin-bottom: 1.6rem; }
+.otp-sub strong { color: var(--edc-blue); font-weight: 700; }
+.otp-input { text-align: center !important; font-size: 2.4rem !important; font-weight: 900 !important; letter-spacing: 0.55em !important; padding: 16px 10px !important; font-family: 'Courier New', monospace !important; border: 2.5px solid var(--border) !important; color: var(--edc-blue) !important; background: var(--light) !important; }
+.otp-input:focus { border-color: var(--edc-blue) !important; background: white !important; box-shadow: 0 0 0 4px rgba(27,47,110,0.10) !important; }
+.timer-row { display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 0.82rem; color: var(--text-muted); margin-bottom: 1.4rem; }
+.timer-pill { background: #FFF8E6; border: 1px solid #FCDFA0; color: #A0640A; font-weight: 700; font-size: 0.82rem; padding: 3px 12px; border-radius: 20px; min-width: 52px; text-align: center; }
+.timer-pill.red { background: #FFF0F0; border-color: #F5C6CB; color: #C0021A; }
+.note-securite { background: #E6F9F2; border: 1px solid #B3EDD8; border-radius: var(--radius-sm); padding: 10px 14px; font-size: 0.78rem; color: #2D6A4F; display: flex; align-items: flex-start; gap: 7px; text-align: left; margin-bottom: 1.4rem; }
+.resend { margin-top: 1.4rem; padding-top: 1.2rem; border-top: 1px solid var(--border-light); font-size: 0.875rem; color: var(--text-muted); }
+.resend a { color: var(--edc-blue); font-weight: 600; text-decoration: none; }
+@keyframes fadeUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
+</style>
+{% endblock %}
+{% block contenu %}
+<div class="otp-page">
+    <div class="otp-card">
+        <div class="otp-icon">📧</div>
+        <div class="otp-title">Vérification en deux étapes</div>
+        <div class="otp-sub">
+            Un code à <strong>5 chiffres</strong> a été envoyé à<br>
+            <strong>{{ email_masque }}</strong><br>
+            Saisissez-le ci-dessous pour continuer.
+        </div>
+
+        <div class="note-securite">🔒 <span>Code valable <strong>10 minutes</strong>. Ne le communiquez à personne, même pas à l'équipe EDC.</span></div>
+
+        <form method="post" id="otp-form">
+            {% csrf_token %}
+            <div class="form-group">
+                <input type="text" name="{{ form.code.html_name }}" id="otp-input" class="form-control otp-input" placeholder="_ _ _ _ _" inputmode="numeric" pattern="[0-9]{5}" maxlength="5" autocomplete="one-time-code" autofocus>
+                {% if form.code.errors %}
+                <div style="margin-top:6px;color:#C0021A;font-size:0.8rem;text-align:left;">
+                    {% for e in form.code.errors %}⚠ {{ e }}<br>{% endfor %}
+                </div>
+                {% endif %}
+            </div>
+
+            <div class="timer-row">⏱ Expire dans : <span class="timer-pill" id="timer">10:00</span></div>
+
+            <button type="submit" class="btn btn-primary btn-block btn-lg" id="submit-btn">✅ Vérifier le code</button>
+        </form>
+
+        <form method="post" action="{% url 'renvoyer_otp' %}" style="display:inline;">
+    {% csrf_token %}
+    <button type="submit" style="background:none;border:none;color:var(--edc-blue);font-weight:600;font-size:0.875rem;cursor:pointer;text-decoration:underline;">
+        Renvoyer un nouveau code →
+    </button>
+</form>
+        <div style="margin-top:0.8rem;">
+            <a href="{% url 'connexion' %}" style="font-size:0.8rem;color:var(--text-muted);text-decoration:none;">← Retour à la connexion</a>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let secs = 600;
+const timerEl = document.getElementById('timer');
+const btn     = document.getElementById('submit-btn');
+(function tick() {
+    if (secs <= 0) {
+        timerEl.textContent = 'Expiré';
+        timerEl.classList.add('red');
+        btn.disabled = true;
+        btn.textContent = '⏰ Code expiré — demandez un nouveau code';
+        return;
+    }
+    const m = String(Math.floor(secs / 60)).padStart(2,'0');
+    const s = String(secs % 60).padStart(2,'0');
+    timerEl.textContent = `${m}:${s}`;
+    if (secs <= 60) timerEl.classList.add('red');
+    secs--;
+    setTimeout(tick, 1000);
+})();
+const inp = document.getElementById('otp-input');
+inp.addEventListener('input', function() {
+    this.value = this.value.replace(/\D/g,'').slice(0,5);
+    if (this.value.length === 5) document.getElementById('otp-form').submit();
+});
+</script>
+{% endblock %}

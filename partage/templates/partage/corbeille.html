@@ -1,0 +1,95 @@
+{% extends 'partage/base.html' %}
+{% block titre %}Corbeille — Cloud EDC{% endblock %}
+{% block extra_css %}
+<style>
+.page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem; }
+.page-title { font-size: 1.4rem; font-weight: 800; color: var(--edc-blue); }
+.page-sub   { font-size: 0.83rem; color: var(--text-muted); margin-top: 3px; }
+.info-banner {
+    background: #FFF8E6; border: 1px solid #FCDFA0;
+    border-radius: var(--radius); padding: 12px 18px;
+    margin-bottom: 1.5rem; font-size: 0.85rem; color: #8A5300;
+    display: flex; align-items: center; gap: 10px;
+}
+.file-row {
+    background: white; border: 1px solid var(--border-light);
+    border-radius: var(--radius); padding: 1rem 1.2rem;
+    margin-bottom: 10px; display: flex; align-items: center; gap: 14px;
+    box-shadow: var(--shadow-sm); transition: all 0.2s;
+}
+.file-row:hover { box-shadow: var(--shadow-md); }
+.file-icon-wrap {
+    width: 48px; height: 48px; border-radius: 12px;
+    background: #F0F4F8; display: flex; align-items: center; justify-content: center;
+    font-size: 1.5rem; flex-shrink: 0;
+}
+.file-info { flex: 1; min-width: 0; }
+.file-name { font-weight: 700; color: var(--text-dark); font-size: 0.9rem; word-break: break-word; }
+.file-meta { color: var(--text-muted); font-size: 0.78rem; margin-top: 3px; display: flex; gap: 12px; flex-wrap: wrap; }
+.file-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.empty-state { text-align: center; padding: 5rem 2rem; background: white; border: 1px solid var(--border-light); border-radius: var(--radius); }
+.empty-icon { font-size: 4rem; margin-bottom: 1rem; opacity: 0.3; }
+.empty-title { font-size: 1.1rem; font-weight: 700; color: var(--text-dark); margin-bottom: 0.5rem; }
+.empty-sub { font-size: 0.875rem; color: var(--text-muted); margin-bottom: 1.5rem; }
+.countdown { color: #C0021A; font-weight: 600; }
+</style>
+{% endblock %}
+
+{% block contenu %}
+<div class="page-header animate-in">
+    <div>
+        <div class="page-title">🗑️ Ma corbeille</div>
+        <div class="page-sub">{{ fichiers|length }} fichier{{ fichiers|length|pluralize }} en corbeille</div>
+    </div>
+    <div style="display:flex;gap:8px;">
+        <a href="{% url 'mes_fichiers' %}" class="btn btn-secondary btn-sm">← Mes fichiers</a>
+        {% if fichiers %}
+        <form method="post" action="{% url 'vider_corbeille' %}" onsubmit="return confirm('Vider entièrement la corbeille ? Cette action est IRRÉVERSIBLE.');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger btn-sm">💥 Vider la corbeille</button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<div class="info-banner animate-in">
+    ℹ️ Les fichiers de la corbeille sont automatiquement supprimés après <strong>30 jours</strong>.
+    Vous pouvez les restaurer à tout moment avant cette date.
+</div>
+
+{% if fichiers %}
+    {% for f in fichiers %}
+    <div class="file-row animate-in">
+        <div class="file-icon-wrap">{{ f.icone }}</div>
+        <div class="file-info">
+            <div class="file-name">{{ f.nom_original }}</div>
+            <div class="file-meta">
+                <span>💾 {{ f.taille|filesizeformat }}</span>
+                <span>🗑️ Supprimé le {{ f.date_suppression|date:"d/m/Y à H:i" }}</span>
+                <span class="countdown">
+                    ⏰ Expire le {{ f.date_suppression|date:"d/m/Y"|add:"30 days" }}
+                </span>
+            </div>
+        </div>
+        <div class="file-actions">
+            <form method="post" action="{% url 'restaurer_fichier' f.id %}" style="display:inline;">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-green btn-sm">♻️ Restaurer</button>
+            </form>
+            <form method="post" action="{% url 'supprimer_definitivement' f.id %}" style="display:inline;"
+                  onsubmit="return confirm('Supprimer DÉFINITIVEMENT « {{ f.nom_original }} » ? Cette action est irréversible.');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-danger btn-sm">💥</button>
+            </form>
+        </div>
+    </div>
+    {% endfor %}
+{% else %}
+    <div class="empty-state animate-in">
+        <div class="empty-icon">🗑️</div>
+        <div class="empty-title">Votre corbeille est vide</div>
+        <div class="empty-sub">Les fichiers que vous supprimez apparaîtront ici pendant 30 jours.</div>
+        <a href="{% url 'mes_fichiers' %}" class="btn btn-primary">← Retour à mes fichiers</a>
+    </div>
+{% endif %}
+{% endblock %}

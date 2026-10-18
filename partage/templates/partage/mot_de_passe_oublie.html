@@ -1,0 +1,41 @@
+{% extends 'partage/base.html' %}
+{% block titre %}Mot de passe oublié — Cloud EDC{% endblock %}
+{% block extra_css %}
+<style>
+.auth-page { min-height: calc(100vh - 200px); display: flex; align-items: center; justify-content: center; padding: 2rem 1rem; }
+.auth-card { background: white; border: 1px solid var(--border-light); border-radius: var(--radius-lg); padding: 2.5rem 2.2rem; box-shadow: var(--shadow-md); width: 100%; max-width: 420px; animation: fadeUp 0.5s ease; }
+.auth-icon { width: 72px; height: 72px; background: linear-gradient(135deg, #FFF3D6, #FFE4B0); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 2rem; margin: 0 auto 1.2rem; border: 3px solid rgba(224,123,32,0.2); }
+.auth-title { font-size: 1.4rem; font-weight: 800; color: var(--edc-blue); margin-bottom: 0.4rem; text-align: center; }
+.auth-sub   { font-size: 0.875rem; color: var(--text-muted); text-align: center; line-height: 1.6; margin-bottom: 1.8rem; }
+.auth-footer { text-align: center; margin-top: 1.2rem; font-size: 0.875rem; color: var(--text-muted); }
+.auth-footer a { color: var(--edc-blue); font-weight: 600; text-decoration: none; }
+@keyframes fadeUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
+</style>
+{% endblock %}
+{% block contenu %}
+<div class="auth-page">
+    <div class="auth-card">
+        <div class="auth-icon">🔑</div>
+        <div class="auth-title">Mot de passe oublié ?</div>
+        <div class="auth-sub">
+            Saisissez l'adresse email associée à votre compte.<br>
+            Vous recevrez un code de vérification pour réinitialiser votre mot de passe.
+        </div>
+
+        <form method="post" novalidate>
+            {% csrf_token %}
+            <div class="form-group">
+                <label class="form-label" for="id_email">Adresse e-mail</label>
+                <input type="email" name="{{ form.email.html_name }}" id="id_email" class="form-control" placeholder="votre.email@edc.cm" autocomplete="email" autofocus value="{{ form.email.value|default:'' }}">
+                {% if form.email.errors %}
+                <div style="margin-top:4px;color:#C0021A;font-size:0.8rem;">
+                    {% for e in form.email.errors %}⚠ {{ e }}<br>{% endfor %}
+                </div>
+                {% endif %}
+            </div>
+            <button type="submit" class="btn btn-primary btn-block btn-lg mt-2">📧 Envoyer le code de réinitialisation</button>
+        </form>
+        <div class="auth-footer mt-2"><a href="{% url 'connexion' %}">← Retour à la connexion</a></div>
+    </div>
+</div>
+{% endblock %}

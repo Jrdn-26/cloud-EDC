@@ -1,0 +1,137 @@
+{% extends 'partage/base.html' %}
+{% block titre %}Configuration — Cloud EDC{% endblock %}
+{% block extra_css %}
+<style>
+.config-header {
+    background: linear-gradient(135deg, #142258, #1B2F6E);
+    border-radius: var(--radius-lg); padding: 1.8rem 2rem;
+    margin-bottom: 1.5rem; color: white;
+    display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem;
+}
+.config-header h1 { font-size: 1.5rem; font-weight: 800; margin-bottom: 0.3rem; }
+.config-header p { font-size: 0.875rem; color: rgba(255,255,255,0.70); }
+
+.section-block {
+    background: white; border: 1px solid var(--border-light);
+    border-radius: var(--radius); padding: 1.5rem;
+    margin-bottom: 1.5rem; box-shadow: var(--shadow-sm);
+}
+.section-block h3 {
+    font-size: 1.05rem; font-weight: 700; color: var(--edc-blue);
+    margin-bottom: 1rem;
+    display: flex; align-items: center; gap: 8px;
+}
+.section-block h3::before {
+    content: ''; display: inline-block;
+    width: 4px; height: 20px;
+    background: var(--edc-green); border-radius: 2px;
+}
+
+.help-text {
+    font-size: 0.8rem; color: var(--text-muted);
+    margin-top: 6px; line-height: 1.5;
+}
+
+.ext-preview {
+    display: flex; flex-wrap: wrap; gap: 6px;
+    padding: 12px; background: var(--light);
+    border-radius: var(--radius-sm); min-height: 60px;
+    margin-top: 10px;
+}
+.ext-badge {
+    display: inline-flex; align-items: center;
+    padding: 4px 10px; background: #E6F0FF;
+    color: var(--edc-blue); border: 1px solid #B8D0F0;
+    border-radius: 20px; font-size: 0.75rem; font-weight: 700;
+    font-family: 'Courier New', monospace;
+}
+
+.count-info {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: #E6F9F2; color: var(--edc-green-dark);
+    padding: 4px 12px; border-radius: 20px;
+    font-size: 0.82rem; font-weight: 700;
+    margin-left: 10px;
+}
+
+.warning-box {
+    background: #FFF8E6; border: 1px solid #FCDFA0;
+    border-radius: var(--radius-sm); padding: 12px 16px;
+    font-size: 0.82rem; color: #8A5300;
+    margin-top: 12px;
+    display: flex; align-items: flex-start; gap: 8px;
+}
+
+textarea.form-control {
+    font-family: 'Courier New', monospace;
+    font-size: 0.85rem;
+    line-height: 1.6;
+    min-height: 120px;
+    resize: vertical;
+}
+</style>
+{% endblock %}
+
+{% block contenu %}
+<div class="config-header animate-in">
+    <div>
+        <h1>⚙️ Configuration des extensions</h1>
+        <p>Choisissez les types de fichiers autorisés sur le cloud</p>
+    </div>
+    <a href="{% url 'admin_dashboard' %}" class="btn btn-secondary btn-sm"
+       style="background:rgba(255,255,255,0.15);color:white;border-color:rgba(255,255,255,0.25);">
+        ← Dashboard
+    </a>
+</div>
+
+<form method="post">
+    {% csrf_token %}
+
+    <!-- Extensions autorisées -->
+    <div class="section-block animate-in">
+        <h3>
+            📎 Extensions autorisées
+            <span class="count-info">{{ nb_extensions }} extension{{ nb_extensions|pluralize }}</span>
+        </h3>
+        <div class="form-group">
+            <label class="form-label">Liste des extensions (séparées par des virgules, sans le point)</label>
+            <textarea name="extensions_autorisees" class="form-control" rows="5">{{ config.extensions_autorisees }}</textarea>
+            <div class="help-text">
+                Exemple : <code>pdf,doc,docx,jpg,png,mp4,zip</code><br>
+                Les extensions seront automatiquement mises en minuscules et triées.
+            </div>
+        </div>
+
+        <div style="margin-top:16px;">
+            <div class="help-text" style="font-weight:600;color:var(--text-dark);margin-bottom:8px;">Aperçu des extensions actuelles :</div>
+            <div class="ext-preview">
+                {% for ext in extensions_liste %}
+                    <span class="ext-badge">.{{ ext }}</span>
+                {% empty %}
+                    <span style="color:var(--text-muted);">Aucune extension configurée</span>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Taille maximale -->
+    <div class="section-block animate-in">
+        <h3>💾 Taille maximale d'un fichier</h3>
+        <div class="form-group" style="max-width:300px;">
+            <label class="form-label">Taille maximale (en MB)</label>
+            <input type="number" name="taille_max_mb" class="form-control" value="{{ config.taille_max_mb }}" min="1" max="10000">
+            <div class="help-text">Tout fichier dépassant cette taille sera refusé à l'upload.</div>
+        </div>
+    </div>
+
+    <!-- Info sécurité -->
+    <div class="warning-box animate-in">
+        ⚠️ <span>Les modifications s'appliquent immédiatement à tous les utilisateurs. Assurez-vous de ne pas exclure des extensions courantes par erreur.</span>
+    </div>
+
+    <div style="margin-top:1.5rem;display:flex;gap:10px;flex-wrap:wrap;">
+        <button type="submit" class="btn btn-primary btn-lg">💾 Enregistrer la configuration</button>
+        <a href="{% url 'admin_dashboard' %}" class="btn btn-secondary btn-lg">Annuler</a>
+    </div>
+</form>
+{% endblock %}

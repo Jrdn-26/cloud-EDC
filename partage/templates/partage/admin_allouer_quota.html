@@ -1,0 +1,59 @@
+{% extends 'partage/base.html' %}
+{% block titre %}Allouer un quota — Admin Cloud EDC{% endblock %}
+{% block extra_css %}
+<style>
+.quota-wrapper { max-width: 520px; margin: 0 auto; }
+.user-banner { background: linear-gradient(135deg, var(--edc-blue-dark), var(--edc-blue)); border-radius: var(--radius); padding: 1.4rem 1.6rem; margin-bottom: 1.5rem; display: flex; align-items: center; gap: 14px; color: white; }
+.user-avatar-lg { width: 54px; height: 54px; border-radius: 14px; background: white; color: var(--edc-blue); display: flex; align-items: center; justify-content: center; font-size: 1.2rem; font-weight: 800; text-transform: uppercase; flex-shrink: 0; }
+.user-banner h3 { font-size: 1.05rem; font-weight: 800; margin-bottom: 2px; }
+.user-banner p  { font-size: 0.82rem; color: rgba(255,255,255,0.70); }
+.current-quota-row { display: flex; justify-content: space-between; align-items: center; background: var(--light); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px 16px; margin-bottom: 0.8rem; }
+.cq-label { font-size:0.75rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:3px; }
+.cq-value { font-size:1.05rem;font-weight:800;color:var(--text-dark); }
+.divider { text-align:center;color:var(--text-muted);font-size:0.82rem;margin:0.8rem 0;position:relative; }
+.divider::before, .divider::after { content:''; position:absolute; top:50%; width:42%; height:1px; background:var(--border); }
+.divider::before { left:0; } .divider::after { right:0; }
+</style>
+{% endblock %}
+{% block contenu %}
+<div class="quota-wrapper animate-in">
+    <a href="{% url 'admin_dashboard' %}" class="btn btn-secondary btn-sm mb-2">← Dashboard</a>
+    <div class="user-banner">
+        <div class="user-avatar-lg">{{ utilisateur.username|slice:":2" }}</div>
+        <div>
+            <h3>{{ utilisateur.username }}</h3>
+            <p>{{ utilisateur.email|default:"Pas d'email" }} · {{ utilisateur.fichiers.count }} fichier{{ utilisateur.fichiers.count|pluralize }}</p>
+        </div>
+    </div>
+    <div class="card">
+        <div class="card-header"><div class="card-title">💾 Modifier le quota de stockage</div></div>
+        <div class="current-quota-row">
+            <div><div class="cq-label">Quota actuel</div><div class="cq-value">{{ profil.quota_gb }} GB</div></div>
+            <div style="text-align:right;">
+                <div class="cq-label">Espace utilisé</div>
+                <div class="cq-value">{{ profil.espace_utilise_mb }} MB <span style="font-size:0.82rem;font-weight:500;color:var(--text-muted);">({{ profil.pourcentage_utilise }}%)</span></div>
+            </div>
+        </div>
+        <div class="progress mb-3" style="height:8px;">
+            <div class="progress-bar {% if profil.pourcentage_utilise > 85 %}warn{% endif %}" style="width:{{ profil.pourcentage_utilise }}%;"></div>
+        </div>
+        <form method="post">
+            {% csrf_token %}
+            <div class="form-group">
+                <label class="form-label">Quota prédéfini</label>
+                <select name="{{ form.quota_gb.html_name }}" class="form-control">
+                    {% for val, label in form.quota_gb.field.choices %}<option value="{{ val }}">{{ label }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="divider">ou saisir un quota personnalisé</div>
+            <div class="form-group">
+                <label class="form-label">Quota personnalisé (en GB)</label>
+                <input type="number" step="0.1" min="0.1" name="{{ form.quota_personnalise_gb.html_name }}" class="form-control" placeholder="Ex : 7.5" value="{{ form.quota_personnalise_gb.value|default:'' }}">
+                <div style="font-size:0.78rem;color:var(--text-muted);margin-top:4px;">Si renseigné, ce champ prend la priorité.</div>
+                {{ form.quota_personnalise_gb.errors }}
+            </div>
+            <button type="submit" class="btn btn-primary btn-block mt-2" style="padding:12px;">✅ Appliquer le nouveau quota</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,40 @@
+{% extends 'partage/base.html' %}
+{% block titre %}Créer un lien de partage — Cloud EDC{% endblock %}
+{% block extra_css %}
+<style>
+.link-wrapper { max-width: 540px; margin: 0 auto; }
+.file-preview { background: var(--light); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 1rem 1.2rem; margin-bottom: 1.4rem; display: flex; align-items: center; gap: 12px; }
+.file-preview-icon { width: 44px; height: 44px; background: #E6F0FF; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.4rem; flex-shrink: 0; }
+</style>
+{% endblock %}
+{% block contenu %}
+<div class="link-wrapper animate-in">
+    <a href="{% url 'mes_fichiers' %}" class="btn btn-secondary btn-sm mb-2">← Retour</a>
+    <div class="card">
+        <div class="card-header"><div class="card-title">🔗 Créer un lien de partage</div></div>
+        <div class="file-preview">
+            <div class="file-preview-icon">{{ fichier.icone }}</div>
+            <div style="flex:1;min-width:0;">
+                <div style="font-weight:700;font-size:0.9rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ fichier.nom_original }}</div>
+                <div style="font-size:0.78rem;color:var(--text-muted);margin-top:3px;">{{ fichier.taille|filesizeformat }} · {{ fichier.date_upload|date:"d/m/Y" }}</div>
+            </div>
+            <span class="badge badge-success">✓ Validé</span>
+        </div>
+        <form method="post">
+            {% csrf_token %}
+            <div class="form-group">
+                <label class="form-label">⏰ Durée de validité du lien</label>
+                <select name="{{ form.duree_validite.html_name }}" class="form-control">
+                    {% for val, label in form.duree_validite.field.choices %}<option value="{{ val }}">{{ label }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">🔢 Nombre max de téléchargements <span style="color:var(--text-muted);font-weight:400;">(vide = illimité)</span></label>
+                <input type="number" name="{{ form.nb_telechargements_max.html_name }}" class="form-control" placeholder="Ex : 5" min="1" value="{{ form.nb_telechargements_max.value|default:'' }}">
+                {{ form.nb_telechargements_max.errors }}
+            </div>
+            <button type="submit" class="btn btn-primary btn-block" style="padding:12px;">🔗 Générer le lien de partage</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

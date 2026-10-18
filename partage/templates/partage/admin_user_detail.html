@@ -1,0 +1,334 @@
+{% extends 'partage/base.html' %}
+{% block titre %}{{ utilisateur.username }} — Admin Cloud EDC{% endblock %}
+{% block extra_css %}
+<style>
+.user-hero {
+    background: linear-gradient(135deg, #142258, #1B2F6E, #2442A0);
+    border-radius: var(--radius-lg);
+    padding: 2rem;
+    margin-bottom: 1.5rem;
+    color: white;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    flex-wrap: wrap;
+}
+.user-avatar-xl {
+    width: 90px; height: 90px;
+    border-radius: 20px;
+    background: linear-gradient(135deg, #E07B20, #C06010);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 2.2rem; font-weight: 800; color: white;
+    text-transform: uppercase; flex-shrink: 0;
+    box-shadow: 0 8px 20px rgba(224, 123, 32, 0.4);
+}
+.user-hero-info { flex: 1; min-width: 250px; }
+.user-hero-info h1 { font-size: 1.6rem; font-weight: 800; margin-bottom: 6px; }
+.user-hero-info p { font-size: 0.9rem; color: rgba(255,255,255,0.75); }
+.user-hero-badges { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+.hero-badge {
+    padding: 4px 12px; border-radius: 20px;
+    font-size: 0.75rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.05em;
+}
+.hero-badge.staff { background: rgba(224,123,32,0.3); color: #FFD699; border: 1px solid rgba(224,123,32,0.5); }
+.hero-badge.super { background: rgba(239,68,68,0.3); color: #FCA5A5; border: 1px solid rgba(239,68,68,0.5); }
+.hero-badge.active { background: rgba(34,197,94,0.3); color: #86EFAC; border: 1px solid rgba(34,197,94,0.5); }
+.hero-badge.inactive { background: rgba(107,114,128,0.4); color: #D1D5DB; border: 1px solid rgba(107,114,128,0.6); }
+
+.hero-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* Cartes de stats mini */
+.mini-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 12px;
+    margin-bottom: 1.5rem;
+}
+.mini-stat {
+    background: white; border: 1px solid var(--border-light);
+    border-radius: var(--radius); padding: 1rem 1.2rem;
+    box-shadow: var(--shadow-sm);
+    border-left: 4px solid var(--edc-blue);
+}
+.mini-stat.green { border-left-color: var(--edc-green); }
+.mini-stat.orange { border-left-color: var(--edc-orange); }
+.mini-stat.purple { border-left-color: #a855f7; }
+.mini-stat.red { border-left-color: #ef4444; }
+.mini-stat-label {
+    font-size: 0.72rem; font-weight: 700; color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: 0.06em;
+    margin-bottom: 6px;
+}
+.mini-stat-value {
+    font-size: 1.5rem; font-weight: 800; color: var(--text-dark);
+    line-height: 1.1;
+}
+.mini-stat-value small { font-size: 0.9rem; font-weight: 500; color: var(--text-muted); }
+
+/* Onglets */
+.tab-nav {
+    display: flex; gap: 2px;
+    border-bottom: 2px solid var(--border);
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+}
+.tab-btn {
+    background: none; border: none; font-family: inherit;
+    padding: 10px 20px; font-size: 0.9rem; font-weight: 600;
+    color: var(--text-muted); cursor: pointer;
+    border-bottom: 2px solid transparent; margin-bottom: -2px;
+    transition: all 0.2s;
+}
+.tab-btn:hover { color: var(--edc-blue); }
+.tab-btn.active { color: var(--edc-blue); border-bottom-color: var(--edc-blue); }
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
+/* Table fichier */
+.file-row-danger td { background: #FFF5F5; }
+
+/* Quota */
+.quota-block {
+    background: white; border: 1px solid var(--border-light);
+    border-radius: var(--radius); padding: 1.2rem 1.5rem;
+    box-shadow: var(--shadow-sm); margin-bottom: 1.5rem;
+}
+.quota-row { display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--text-muted); margin-bottom: 8px; font-weight: 600; }
+.quota-row strong { color: var(--text-dark); }
+.quota-bar { background: var(--light2); height: 10px; border-radius: 10px; overflow: hidden; }
+.quota-fill { height: 100%; border-radius: 10px; transition: width 0.6s; }
+
+.action-bar { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 1.5rem; }
+</style>
+{% endblock %}
+
+{% block contenu %}
+<!-- En-tête utilisateur -->
+<div class="user-hero animate-in">
+    <div class="user-avatar-xl">{{ utilisateur.username|slice:":2" }}</div>
+    <div class="user-hero-info">
+        <h1>{{ utilisateur.username }}</h1>
+        <p>📧 {{ utilisateur.email|default:"Pas d'email" }}</p>
+        <div class="user-hero-badges">
+            {% if utilisateur.is_superuser %}<span class="hero-badge super">Super Admin</span>{% endif %}
+            {% if utilisateur.is_staff and not utilisateur.is_superuser %}<span class="hero-badge staff">Staff</span>{% endif %}
+            {% if utilisateur.is_active %}<span class="hero-badge active">✅ Actif</span>
+            {% else %}<span class="hero-badge inactive">🚫 Désactivé</span>{% endif %}
+        </div>
+    </div>
+    <div class="hero-actions">
+        <a href="{% url 'admin_allouer_quota' utilisateur.id %}" class="btn btn-orange btn-sm">
+            💾 Modifier quota
+        </a>
+        <a href="{% url 'admin_dashboard' %}" class="btn btn-secondary btn-sm"
+           style="background:rgba(255,255,255,0.15);color:white;border-color:rgba(255,255,255,0.25);">
+            ← Dashboard
+        </a>
+    </div>
+</div>
+
+<!-- Stats mini -->
+<div class="mini-stats animate-in">
+    <div class="mini-stat">
+        <div class="mini-stat-label">📁 Fichiers</div>
+        <div class="mini-stat-value">{{ stats.nb_fichiers }}</div>
+    </div>
+    <div class="mini-stat green">
+        <div class="mini-stat-label">💾 Espace utilisé</div>
+        <div class="mini-stat-value">{{ profil.espace_utilise_mb }} <small>MB</small></div>
+    </div>
+    <div class="mini-stat orange">
+        <div class="mini-stat-label">🔗 Liens actifs</div>
+        <div class="mini-stat-value">{{ stats.nb_liens_actifs }} <small>/ {{ stats.nb_liens }}</small></div>
+    </div>
+    <div class="mini-stat purple">
+        <div class="mini-stat-label">⬆ Uploads (30j)</div>
+        <div class="mini-stat-value">{{ stats.nb_uploads_30j }}</div>
+    </div>
+    <div class="mini-stat red">
+        <div class="mini-stat-label">📅 Inscrit le</div>
+        <div class="mini-stat-value" style="font-size:1rem;">{{ utilisateur.date_joined|date:"d/m/Y" }}</div>
+    </div>
+</div>
+
+<!-- Quota -->
+<div class="quota-block animate-in">
+    <div class="quota-row">
+        <span>💾 Quota de stockage</span>
+        <span><strong>{{ profil.espace_utilise_mb }} MB</strong> / {{ profil.quota_gb }} GB — {{ profil.pourcentage_utilise }}%</span>
+    </div>
+    <div class="quota-bar">
+        <div class="quota-fill" style="
+            width: {{ profil.pourcentage_utilise }}%;
+            background: {% if profil.pourcentage_utilise > 90 %}linear-gradient(90deg, #ef4444, #f97316){% elif profil.pourcentage_utilise > 70 %}linear-gradient(90deg, #f59e0b, #f97316){% else %}linear-gradient(90deg, #3b82f6, #22c55e){% endif %};
+        "></div>
+    </div>
+</div>
+
+<!-- Actions rapides -->
+<div class="action-bar animate-in">
+    <form method="post" action="{% url 'admin_toggle_user' utilisateur.id %}" style="display:inline;"
+          onsubmit="return confirm('{% if utilisateur.is_active %}Désactiver{% else %}Activer{% endif %} le compte de {{ utilisateur.username }} ?');">
+        {% csrf_token %}
+        <button type="submit" class="btn {% if utilisateur.is_active %}btn-danger{% else %}btn-green{% endif %} btn-sm">
+            {% if utilisateur.is_active %}🚫 Désactiver le compte{% else %}✅ Activer le compte{% endif %}
+        </button>
+    </form>
+</div>
+
+<!-- Onglets -->
+<div class="tab-nav animate-in">
+    <button class="tab-btn active" onclick="showTab('fichiers', this)">📁 Fichiers ({{ stats.nb_fichiers }})</button>
+    <button class="tab-btn" onclick="showTab('liens', this)">🔗 Liens de partage ({{ stats.nb_liens }})</button>
+    <button class="tab-btn" onclick="showTab('logs', this)">📋 Activité ({{ logs|length }})</button>
+</div>
+
+<!-- Onglet Fichiers -->
+<div id="tab-fichiers" class="tab-content active">
+    {% if fichiers %}
+    <div class="card" style="padding:0;">
+        <div class="table-wrapper">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Nom</th>
+                        <th>Type</th>
+                        <th>Taille</th>
+                        <th>Statut</th>
+                        <th>Liens</th>
+                        <th>Date</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for f in fichiers %}
+                    <tr {% if f.statut_scan == 'infecte' %}class="file-row-danger"{% endif %}>
+                        <td style="font-weight:600;font-size:0.85rem;">
+                            {{ f.icone }} {{ f.nom_original }}
+                        </td>
+                        <td style="font-size:0.8rem;color:var(--text-muted);">
+                            {{ f.nom_original|slice:"-4:"|upper }}
+                        </td>
+                        <td style="font-size:0.85rem;">{{ f.taille|filesizeformat }}</td>
+                        <td>
+                            {% if f.statut_scan == 'sain' %}<span class="badge badge-success">Sain</span>
+                            {% elif f.statut_scan == 'infecte' %}<span class="badge badge-danger">Infecté</span>
+                            {% else %}<span class="badge badge-warning">Attente</span>{% endif %}
+                        </td>
+                        <td style="font-size:0.85rem;text-align:center;">{{ f.liens.count }}</td>
+                        <td style="font-size:0.8rem;color:var(--text-muted);">{{ f.date_upload|date:"d/m/Y H:i" }}</td>
+                        <td>
+                            <form method="post" action="{% url 'admin_supprimer_fichier' f.id %}" style="display:inline;"
+                                  onsubmit="return confirm('Supprimer définitivement « {{ f.nom_original }} » ?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-danger btn-sm" title="Supprimer">🗑</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% else %}
+    <div style="text-align:center;padding:3rem;color:var(--text-muted);">
+        <div style="font-size:3rem;opacity:0.3;margin-bottom:1rem;">📭</div>
+        <p>Cet utilisateur n'a aucun fichier.</p>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Onglet Liens -->
+<div id="tab-liens" class="tab-content">
+    {% if liens %}
+    <div class="card" style="padding:0;">
+        <div class="table-wrapper">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Fichier</th>
+                        <th>Token</th>
+                        <th>Téléchargements</th>
+                        <th>Expire le</th>
+                        <th>Statut</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for l in liens %}
+                    <tr>
+                        <td style="font-weight:600;font-size:0.85rem;">{{ l.fichier.icone }} {{ l.fichier.nom_original }}</td>
+                        <td style="font-family:monospace;font-size:0.75rem;color:var(--text-muted);">{{ l.token|slice:":8" }}...</td>
+                        <td style="text-align:center;">
+                            <strong>{{ l.nb_telechargements }}</strong>
+                            {% if l.nb_telechargements_max %} / {{ l.nb_telechargements_max }}{% endif %}
+                        </td>
+                        <td style="font-size:0.8rem;">{{ l.date_expiration|date:"d/m/Y H:i" }}</td>
+                        <td>
+                            {% if l.est_valide %}<span class="badge badge-success">Actif</span>
+                            {% else %}<span class="badge badge-danger">Expiré</span>{% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% else %}
+    <div style="text-align:center;padding:3rem;color:var(--text-muted);">
+        <div style="font-size:3rem;opacity:0.3;margin-bottom:1rem;">🔗</div>
+        <p>Cet utilisateur n'a créé aucun lien de partage.</p>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Onglet Logs -->
+<div id="tab-logs" class="tab-content">
+    {% if logs %}
+    <div class="card" style="padding:0;">
+        <div class="table-wrapper">
+            <table>
+                <thead>
+                    <tr><th>Date</th><th>Action</th><th>Fichier</th><th>IP</th><th>Détail</th></tr>
+                </thead>
+                <tbody>
+                    {% for log in logs %}
+                    <tr {% if log.action == 'upload_refuse' or log.action == 'acces_refuse' %}style="background:#FFF5F5;"{% endif %}>
+                        <td style="font-size:0.78rem;color:var(--text-muted);white-space:nowrap;">{{ log.date_evenement|date:"d/m/Y H:i:s" }}</td>
+                        <td style="font-size:0.83rem;font-weight:700;">
+                            {% if log.action == 'upload' %}<span style="color:var(--edc-green-dark);">⬆ Upload</span>
+                            {% elif log.action == 'telechargement' %}<span style="color:var(--edc-blue-mid);">⬇ Téléchargement</span>
+                            {% elif log.action == 'creation_lien' %}<span style="color:#6B4FBB;">🔗 Lien</span>
+                            {% elif log.action == 'upload_refuse' %}<span style="color:#C0021A;">🦠 Refusé</span>
+                            {% elif log.action == 'acces_refuse' %}<span style="color:#A0640A;">🚫 Accès refusé</span>
+                            {% elif log.action == 'suppression' %}<span style="color:#7A3E3E;">🗑 Suppression</span>
+                            {% else %}{{ log.get_action_display }}{% endif %}
+                        </td>
+                        <td style="font-size:0.83rem;">{{ log.fichier.nom_original|default:"—" }}</td>
+                        <td style="font-size:0.78rem;font-family:monospace;color:var(--text-muted);">{{ log.adresse_ip|default:"—" }}</td>
+                        <td style="font-size:0.8rem;color:var(--text-muted);">{{ log.detail|default:"—" }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% else %}
+    <div style="text-align:center;padding:3rem;color:var(--text-muted);">
+        <div style="font-size:3rem;opacity:0.3;margin-bottom:1rem;">📋</div>
+        <p>Aucune activité enregistrée pour cet utilisateur.</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function showTab(name, btn) {
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById('tab-' + name).classList.add('active');
+    btn.classList.add('active');
+}
+</script>
+{% endblock %}

@@ -1,0 +1,114 @@
+{% extends 'partage/base.html' %}
+{% block titre %}Mes fichiers — Cloud EDC{% endblock %}
+{% block extra_css %}
+<style>
+.page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem; }
+.page-title { font-size: 1.4rem; font-weight: 800; color: var(--edc-blue); }
+.page-sub   { font-size: 0.83rem; color: var(--text-muted); margin-top: 3px; }
+.quota-card { background: white; border: 1px solid var(--border-light); border-radius: var(--radius); padding: 1.4rem 1.8rem; margin-bottom: 1.5rem; box-shadow: var(--shadow-sm); display: flex; align-items: center; gap: 2rem; flex-wrap: wrap; border-left: 4px solid var(--edc-blue); }
+.quota-numbers { flex: 1; min-width: 160px; }
+.quota-label  { font-size: 0.75rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
+.quota-value  { font-size: 1.1rem; font-weight: 800; color: var(--text-dark); }
+.quota-bar-section { flex: 2; min-width: 220px; }
+.quota-bar-meta { display: flex; justify-content: space-between; font-size: 0.78rem; color: var(--text-muted); margin-bottom: 6px; font-weight: 500; }
+.quota-warn { font-size: 0.78rem; color: #A0640A; margin-top: 6px; display: flex; align-items: center; gap: 5px; }
+.files-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px,1fr)); gap: 1.1rem; }
+.file-card { background: white; border: 1px solid var(--border-light); border-radius: var(--radius); padding: 1.2rem; box-shadow: var(--shadow-sm); transition: all 0.25s; display: flex; flex-direction: column; gap: 0.9rem; position: relative; overflow: hidden; }
+.file-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: var(--edc-blue); opacity: 0; transition: opacity 0.2s; }
+.file-card:hover::before { opacity: 1; }
+.file-card:hover { box-shadow: var(--shadow-md); transform: translateY(-3px); }
+.file-top { display: flex; align-items: flex-start; gap: 12px; }
+.file-icon { width: 46px; height: 46px; border-radius: 12px; background: #E6F0FF; display: flex; align-items: center; justify-content: center; font-size: 1.4rem; flex-shrink: 0; }
+.file-name { font-size: 0.9rem; font-weight: 700; color: var(--text-dark); word-break: break-all; line-height: 1.3; }
+.file-badges { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px; }
+.file-meta { display: flex; gap: 10px; flex-wrap: wrap; font-size: 0.75rem; color: var(--text-muted); }
+.file-meta span { display: flex; align-items: center; gap: 3px; }
+.file-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: auto; padding-top: 0.5rem; border-top: 1px solid var(--border-light); }
+.enc-badge { display: inline-flex; align-items: center; gap: 3px; font-size: 0.68rem; font-weight: 700; color: var(--edc-green-dark); background: #E6F9F2; border: 1px solid #B3EDD8; padding: 2px 7px; border-radius: 20px; }
+.empty-state { text-align: center; padding: 5rem 2rem; background: white; border: 1px solid var(--border-light); border-radius: var(--radius); box-shadow: var(--shadow-sm); }
+.empty-icon { font-size: 4rem; margin-bottom: 1rem; opacity: 0.3; }
+.empty-title { font-size: 1.1rem; font-weight: 700; color: var(--text-dark); margin-bottom: 0.5rem; }
+.empty-sub   { font-size: 0.875rem; color: var(--text-muted); margin-bottom: 1.5rem; }
+</style>
+{% endblock %}
+
+{% block contenu %}
+<div class="page-header animate-in">
+    <div>
+        <div class="page-title">📁 Mes fichiers</div>
+        <div class="page-sub">{{ fichiers|length }} fichier{{ fichiers|length|pluralize }} stocké{{ fichiers|length|pluralize }} dans votre espace sécurisé</div>
+    </div>
+    <div style="display:flex;gap:8px;">
+        <a href="{% url 'corbeille' %}" class="btn btn-secondary">
+            🗑️ Corbeille{% if nb_corbeille %} ({{ nb_corbeille }}){% endif %}
+        </a>
+        <a href="{% url 'upload_fichier' %}" class="btn btn-primary">⬆ Uploader un fichier</a>
+    </div>
+</div>
+
+<div class="quota-card animate-in">
+    <div class="quota-numbers">
+        <div class="quota-label">Espace utilisé</div>
+        <div class="quota-value">{{ profil.espace_utilise_mb }} MB <span style="font-weight:400;font-size:0.85rem;color:var(--text-muted);">/ {{ profil.quota_gb }} GB</span></div>
+    </div>
+    <div class="quota-bar-section">
+        <div class="quota-bar-meta">
+            <span>{{ profil.pourcentage_utilise }}% utilisé</span>
+            <span>{{ profil.quota_gb }} GB alloués</span>
+        </div>
+        <div class="progress" style="height:10px;">
+            <div class="progress-bar {% if profil.pourcentage_utilise > 85 %}warn{% endif %}" style="width:{{ profil.pourcentage_utilise }}%;"></div>
+        </div>
+        {% if profil.pourcentage_utilise > 85 %}
+        <div class="quota-warn">⚠ Espace presque plein — contactez l'administrateur pour augmenter votre quota.</div>
+        {% endif %}
+    </div>
+    <div style="text-align:center;padding:0 0.5rem;">
+        <div style="font-size:1.4rem;font-weight:800;color:var(--edc-blue);">{{ profil.quota_gb }} GB</div>
+        <div style="font-size:0.72rem;color:var(--text-muted);font-weight:600;text-transform:uppercase;">Quota total</div>
+    </div>
+</div>
+
+{% if fichiers %}
+<div class="files-grid">
+    {% for f in fichiers %}
+    <div class="file-card animate-in">
+        <div class="file-top">
+            <div class="file-icon">{{ f.icone }}</div>
+            <div style="flex:1;min-width:0;">
+                <div class="file-name">{{ f.nom_original }}</div>
+                <div class="file-badges">
+                    {% if f.statut_scan == 'sain' %}<span class="badge badge-success">✓ Sain</span>
+                    {% elif f.statut_scan == 'infecte' %}<span class="badge badge-danger">🦠 Infecté</span>
+                    {% else %}<span class="badge badge-warning">⏳ Scan en cours</span>{% endif %}
+                    {% if f.est_chiffre %}<span class="enc-badge">🔒 AES-256</span>{% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="file-meta">
+            <span>📅 {{ f.date_upload|date:"d/m/Y H:i" }}</span>
+            <span>💾 {{ f.taille|filesizeformat }}</span>
+            <span>🔗 {{ f.liens.count }} lien{{ f.liens.count|pluralize }}</span>
+        </div>
+        <div class="file-actions">
+            {% if f.statut_scan == 'sain' %}
+            <a href="{% url 'telecharger_fichier' f.id %}" class="btn btn-green btn-sm">⬇ Télécharger</a>
+            <a href="{% url 'creer_lien' f.id %}" class="btn btn-secondary btn-sm">🔗 Partager</a>
+            {% endif %}
+            <form method="post" action="{% url 'supprimer_fichier' f.id %}" onsubmit="return confirm('Supprimer définitivement « {{ f.nom_original }} » ?');" style="margin-left:auto;">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-danger btn-sm" title="Supprimer">🗑</button>
+            </form>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="empty-state animate-in">
+    <div class="empty-icon">📭</div>
+    <div class="empty-title">Votre espace est vide</div>
+    <div class="empty-sub">Uploadez votre premier fichier pour démarrer. Il sera automatiquement scanné et chiffré.</div>
+    <a href="{% url 'upload_fichier' %}" class="btn btn-primary btn-lg">⬆ Uploader mon premier fichier</a>
+</div>
+{% endif %}
+{% endblock %}

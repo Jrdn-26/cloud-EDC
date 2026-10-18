@@ -13,8 +13,6 @@ data/
 logs/
 media/
 staticfiles/
-partage/
-projet/
 *.sqlite3
 *.db
 

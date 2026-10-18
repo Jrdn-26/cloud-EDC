@@ -1,0 +1,37 @@
+from django.contrib.auth import views as auth_views
+from django.urls import path
+from . import views
+
+urlpatterns = [
+    path('', views.accueil, name='accueil'),
+    path('inscription/',   views.inscription,   name='inscription'),
+    path('connexion/',     views.connexion_2fa, name='connexion'),
+    path('deconnexion/',   auth_views.LogoutView.as_view(next_page='connexion'), name='deconnexion'),
+    path('verifier-otp/',  views.verifier_otp,    name='verifier_otp'),
+    path('renvoyer-otp/',  views.renvoyer_otp,    name='renvoyer_otp'),
+    path('mot-de-passe-oublie/',          views.mot_de_passe_oublie,    name='mot_de_passe_oublie'),
+    path('reinitialiser-mot-de-passe/',   views.reinitialiser_mdp,      name='reinitialiser_mdp'),
+    path('mes-fichiers/',                    views.mes_fichiers,       name='mes_fichiers'),
+    path('upload/',                          views.upload_fichier,     name='upload_fichier'),
+    path('supprimer/<int:fichier_id>/',      views.supprimer_fichier,  name='supprimer_fichier'),
+    path('telecharger/<int:fichier_id>/',    views.telecharger_fichier,name='telecharger_fichier'),
+    path('lien/creer/<int:fichier_id>/',     views.creer_lien,         name='creer_lien'),
+    path('historique/',                      views.historique,         name='historique'),
+    path('corbeille/',                          views.corbeille,             name='corbeille'),
+    path('restaurer/<int:fichier_id>/',         views.restaurer_fichier,     name='restaurer_fichier'),
+    path('supprimer-definitif/<int:fichier_id>/', views.supprimer_definitivement, name='supprimer_definitivement'),
+    path('vider-corbeille/',                    views.vider_corbeille,       name='vider_corbeille'),
+    path('admin-cloud/corbeille/',              views.admin_corbeille,       name='admin_corbeille'),
+    path('admin-cloud/config-extensions/',      views.admin_config_extensions, name='admin_config_extensions'),
+    path('admin-cloud/restaurer/<int:fichier_id>/', views.admin_restaurer_fichier, name='admin_restaurer_fichier'),
+    path('admin-cloud/supprimer-definitif/<int:fichier_id>/', views.admin_supprimer_definitivement, name='admin_supprimer_definitivement'),
+    path('partage/<uuid:token>/',            views.telecharger_via_lien, name='telecharger_via_lien'),
+    path('admin-cloud/',                              views.admin_dashboard,       name='admin_dashboard'),
+    path('admin-cloud/logs/',                         views.admin_logs,            name='admin_logs'),
+    path('admin-cloud/logs/export-csv/',              views.export_logs_csv,       name='export_logs_csv'),
+    path('admin-cloud/performance/',                  views.admin_performance,     name='admin_performance'),
+    path('admin-cloud/quota/<int:user_id>/',          views.admin_allouer_quota,   name='admin_allouer_quota'),
+    path('admin-cloud/user/<int:user_id>/',            views.admin_user_detail,     name='admin_user_detail'),
+    path('admin-cloud/supprimer/<int:fichier_id>/',   views.admin_supprimer_fichier, name='admin_supprimer_fichier'),
+    path('admin-cloud/toggle-user/<int:user_id>/',    views.admin_toggle_user,     name='admin_toggle_user'),
+]
