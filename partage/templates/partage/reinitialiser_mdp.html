@@ -1,79 +1,72 @@
 {% extends 'partage/base.html' %}
-{% block titre %}Réinitialiser le mot de passe — Cloud EDC{% endblock %}
-{% block extra_css %}
-<style>
-.auth-page { min-height: calc(100vh - 200px); display: flex; align-items: center; justify-content: center; padding: 2rem 1rem; }
-.auth-card { background: white; border: 1px solid var(--border-light); border-radius: var(--radius-lg); padding: 2.5rem 2.2rem; box-shadow: var(--shadow-md); width: 100%; max-width: 440px; animation: fadeUp 0.5s ease; }
-.auth-icon { width: 72px; height: 72px; background: linear-gradient(135deg, #E6F0FF, #D0E4FF); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 2rem; margin: 0 auto 1.2rem; border: 3px solid rgba(27,47,110,0.12); }
-.auth-title { font-size: 1.4rem; font-weight: 800; color: var(--edc-blue); margin-bottom: 0.4rem; text-align: center; }
-.auth-sub   { font-size: 0.875rem; color: var(--text-muted); text-align: center; line-height: 1.6; margin-bottom: 1.8rem; }
-.otp-input { text-align: center !important; font-size: 2.2rem !important; font-weight: 900 !important; letter-spacing: 0.55em !important; padding: 14px 10px !important; font-family: 'Courier New', monospace !important; border: 2.5px solid var(--border) !important; color: var(--edc-blue) !important; background: var(--light) !important; }
-.otp-input:focus { border-color: var(--edc-blue) !important; background: white !important; box-shadow: 0 0 0 4px rgba(27,47,110,0.10) !important; }
-.section-sep { display: flex; align-items: center; gap: 10px; margin: 1.4rem 0; color: var(--text-muted); font-size: 0.82rem; }
-.section-sep::before, .section-sep::after { content: ''; flex: 1; height: 1px; background: var(--border); }
-.note-securite { background: #E6F9F2; border: 1px solid #B3EDD8; border-radius: var(--radius-sm); padding: 10px 14px; font-size: 0.78rem; color: #2D6A4F; display: flex; align-items: flex-start; gap: 7px; margin-bottom: 1.4rem; }
-.timer-row { display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 0.82rem; color: var(--text-muted); margin-bottom: 1.2rem; }
-.timer-pill { background: #FFF8E6; border: 1px solid #FCDFA0; color: #A0640A; font-weight: 700; font-size: 0.82rem; padding: 3px 12px; border-radius: 20px; min-width: 52px; text-align: center; }
-.timer-pill.red { background: #FFF0F0; border-color: #F5C6CB; color: #C0021A; }
-.auth-footer { text-align: center; margin-top: 1.2rem; font-size: 0.875rem; color: var(--text-muted); }
-.auth-footer a { color: var(--edc-blue); font-weight: 600; text-decoration: none; }
-@keyframes fadeUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
-</style>
-{% endblock %}
+{% block titre %}Nouveau mot de passe — Cloud EDC{% endblock %}
 {% block contenu %}
-<div class="auth-page">
-    <div class="auth-card">
-        <div class="auth-icon">🔐</div>
-        <div class="auth-title">Réinitialiser le mot de passe</div>
-        <div class="auth-sub">Code envoyé à <strong style="color:var(--edc-blue);">{{ email_masque }}</strong><br>Saisissez le code reçu puis votre nouveau mot de passe.</div>
-        <div class="note-securite">🔒 <span>Code valable <strong>10 minutes</strong>. Ne le communiquez à personne.</span></div>
+<div class="auth">
+    <div class="auth-entete">
+        <h1>Nouveau mot de passe</h1>
+        <p>Saisissez le code envoyé à <strong>{{ email_masque }}</strong>, puis votre nouveau mot de passe.</p>
+    </div>
 
+    <div class="card">
         <form method="post" id="reset-form" novalidate>
             {% csrf_token %}
+            {% if form.non_field_errors %}
+            <div class="message message-error mb-2">{{ form.non_field_errors|join:" " }}</div>
+            {% endif %}
             <div class="form-group">
-                <label class="form-label">Code de vérification (5 chiffres)</label>
-                <input type="text" name="code" id="otp-input" class="form-control otp-input" placeholder="_ _ _ _ _" inputmode="numeric" pattern="[0-9]{5}" maxlength="5" autocomplete="one-time-code" autofocus>
+                <label class="form-label" for="otp-input">Code de vérification</label>
+                <input type="text" name="code" id="otp-input" class="form-control champ-code"
+                       inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" autofocus>
             </div>
-            <div class="timer-row">⏱ Expire dans : <span class="timer-pill" id="timer">10:00</span></div>
-            <div class="section-sep">Nouveau mot de passe</div>
+            <p class="minuteur" id="minuteur">Le code expire dans <span id="temps">10:00</span>.</p>
+
+            <hr class="separateur">
+
             <div class="form-group">
                 <label class="form-label" for="id_password1">Nouveau mot de passe</label>
-                <input type="password" name="{{ form.password1.html_name }}" id="id_password1" class="form-control" placeholder="••••••••  (8 caractères minimum)" autocomplete="new-password">
-                {% if form.password1.errors %}<div style="margin-top:4px;color:#C0021A;font-size:0.8rem;">{% for e in form.password1.errors %}⚠ {{ e }}<br>{% endfor %}</div>{% endif %}
+                <input type="password" name="{{ form.password1.html_name }}" id="id_password1" class="form-control" autocomplete="new-password">
+                <div class="form-aide">8 caractères minimum.</div>
+                {{ form.password1.errors }}
             </div>
             <div class="form-group">
                 <label class="form-label" for="id_password2">Confirmer le mot de passe</label>
-                <input type="password" name="{{ form.password2.html_name }}" id="id_password2" class="form-control" placeholder="••••••••" autocomplete="new-password">
-                {% if form.password2.errors %}<div style="margin-top:4px;color:#C0021A;font-size:0.8rem;">{% for e in form.password2.errors %}⚠ {{ e }}<br>{% endfor %}</div>{% endif %}
+                <input type="password" name="{{ form.password2.html_name }}" id="id_password2" class="form-control" autocomplete="new-password">
+                {{ form.password2.errors }}
             </div>
-            {% if form.non_field_errors %}<div style="background:#FFF0F0;border:1px solid #F5C6CB;border-radius:8px;padding:10px 14px;margin-bottom:1rem;color:#C0021A;font-size:0.84rem;">{% for e in form.non_field_errors %}⚠ {{ e }}{% endfor %}</div>{% endif %}
-            <button type="submit" class="btn btn-primary btn-block btn-lg mt-1" id="submit-btn">🔒 Réinitialiser mon mot de passe</button>
+            <button type="submit" class="btn btn-primary btn-block btn-lg" id="submit-btn">Enregistrer le mot de passe</button>
         </form>
-        <div class="auth-footer mt-2"><a href="{% url 'mot_de_passe_oublie' %}">Renvoyer un code →</a> &nbsp;·&nbsp; <a href="{% url 'connexion' %}">← Connexion</a></div>
+        <div class="auth-liens">
+            <a href="{% url 'mot_de_passe_oublie' %}">Recevoir un nouveau code</a>
+            <a href="{% url 'connexion' %}">Retour à la connexion</a>
+        </div>
     </div>
 </div>
 {% endblock %}
+
 {% block extra_js %}
 <script>
-let secs = 600;
-const timerEl = document.getElementById('timer');
-const btn     = document.getElementById('submit-btn');
-(function tick() {
-    if (secs <= 0) {
-        timerEl.textContent = 'Expiré';
-        timerEl.classList.add('red');
-        btn.disabled = true;
-        btn.textContent = '⏰ Code expiré — demandez un nouveau code';
-        return;
-    }
-    const m = String(Math.floor(secs / 60)).padStart(2,'0');
-    const s = String(secs % 60).padStart(2,'0');
-    timerEl.textContent = `${m}:${s}`;
-    if (secs <= 60) timerEl.classList.add('red');
-    secs--;
-    setTimeout(tick, 1000);
+(function () {
+    var secondes = 600;
+    var temps = document.getElementById('temps');
+    var minuteur = document.getElementById('minuteur');
+    var bouton = document.getElementById('submit-btn');
+    (function tic() {
+        if (secondes <= 0) {
+            minuteur.textContent = 'Le code a expiré. Demandez-en un nouveau.';
+            minuteur.classList.add('urgent');
+            bouton.disabled = true;
+            return;
+        }
+        var m = String(Math.floor(secondes / 60)).padStart(2, '0');
+        var s = String(secondes % 60).padStart(2, '0');
+        temps.textContent = m + ':' + s;
+        if (secondes <= 60) minuteur.classList.add('urgent');
+        secondes--;
+        setTimeout(tic, 1000);
+    })();
+    document.getElementById('otp-input').addEventListener('input', function () {
+        this.value = this.value.replace(/\D/g, '').slice(0, 6);
+    });
 })();
-const inp = document.getElementById('otp-input');
-inp.addEventListener('input', function() { this.value = this.value.replace(/\D/g,'').slice(0,5); });
 </script>
 {% endblock %}

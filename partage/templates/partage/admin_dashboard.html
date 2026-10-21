@@ -1,164 +1,99 @@
 {% extends 'partage/base.html' %}
+{% load interface %}
 {% block titre %}Administration — Cloud EDC{% endblock %}
-{% block extra_css %}
-<style>
-.admin-header { background: linear-gradient(135deg, var(--edc-blue-dark), var(--edc-blue)); border-radius: var(--radius-lg); padding: 1.8rem 2rem; margin-bottom: 1.5rem; color: white; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem; }
-.admin-header h1 { font-size: 1.5rem; font-weight: 800; margin-bottom: 0.3rem; }
-.admin-header p  { font-size: 0.875rem; color: rgba(255,255,255,0.70); }
-.clamav-pill { display: inline-flex; align-items: center; gap: 7px; padding: 6px 14px; border-radius: 20px; font-size: 0.82rem; font-weight: 700; }
-.clamav-on  { background: rgba(0,168,107,0.25); border:1px solid rgba(0,168,107,0.5); color:#00D688; }
-.clamav-off { background: rgba(245,166,35,0.25); border:1px solid rgba(245,166,35,0.5); color:var(--edc-orange); }
-.pulse { width:8px; height:8px; border-radius:50%; display:inline-block; }
-.pulse-green  { background:var(--edc-green);  animation:pulse 1.4s infinite; }
-.pulse-orange { background:var(--edc-orange); animation:pulse 1.4s infinite; }
-@keyframes pulse { 0%,100% { box-shadow:0 0 0 0 rgba(0,168,107,0.5); } 50% { box-shadow:0 0 0 7px rgba(0,168,107,0); } }
-.tab-nav { display: flex; gap: 2px; border-bottom: 2px solid var(--border); margin-bottom: 1.5rem; }
-.tab-btn { background:none; border:none; font-family:inherit; padding:9px 18px; font-size:0.875rem; font-weight:600; color:var(--text-muted); cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-2px; transition:all 0.2s; }
-.tab-btn:hover { color:var(--edc-blue); }
-.tab-btn.active { color:var(--edc-blue); border-bottom-color:var(--edc-blue); }
-.tab-content { display:none; }
-.tab-content.active { display:block; }
-.mini-bar { height:4px; background:var(--light2); border-radius:2px; margin-top:5px; overflow:hidden; width:100px; }
-.mini-fill { height:100%; border-radius:2px; background:linear-gradient(90deg,var(--edc-blue-mid),var(--edc-green)); }
-.mini-fill.warn { background:linear-gradient(90deg,var(--edc-orange),#E05A00); }
-.user-row-disabled td { opacity:0.55; }
-.log-danger td { background:#FFF5F5 !important; }
-.activity-row { display: grid; grid-template-columns: repeat(3,1fr); gap: 1rem; margin-bottom: 1.5rem; }
-.activity-card { background:white; border:1px solid var(--border-light); border-radius:var(--radius); padding:1rem 1.2rem; box-shadow:var(--shadow-sm); text-align:center; }
-.activity-num  { font-size:1.8rem; font-weight:800; color:var(--edc-blue); }
-.activity-label{ font-size:0.75rem; color:var(--text-muted); font-weight:600; text-transform:uppercase; letter-spacing:0.05em; margin-top:3px; }
-</style>
-{% endblock %}
-
 {% block contenu %}
-<div class="admin-header animate-in">
+<div class="titre-page">
     <div>
-        <h1>🛡 Tableau de bord administrateur</h1>
-        <p>Supervision complète du Cloud EDC · Electricity Development Corporation</p>
+        <h1>Administration</h1>
+        <p>
+            Antivirus ClamAV :
+            {% if statut_clamav.disponible %}<span class="statut ok">opérationnel ({{ statut_clamav.mode }})</span>
+            {% else %}<span class="statut ko">indisponible — les dépôts sont refusés</span>{% endif %}
+        </p>
     </div>
-    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-        {% if statut_clamav.disponible %}
-        <div class="clamav-pill clamav-on"><span class="pulse pulse-green"></span> ClamAV actif</div>
-        {% else %}
-        <div class="clamav-pill clamav-off"><span class="pulse pulse-orange"></span> {{ statut_clamav.mode }}</div>
-        {% endif %}
-        <a href="{% url 'admin_performance' %}" class="btn btn-secondary btn-sm" style="background:rgba(255,255,255,0.15);color:white;border-color:rgba(255,255,255,0.25);">⚡ Performance</a>
-        <a href="{% url 'admin_logs' %}" class="btn btn-secondary btn-sm" style="background:rgba(255,255,255,0.15);color:white;border-color:rgba(255,255,255,0.25);">📋 Tous les logs</a>
-    </div>
-</div>
-
-<div class="stats-grid animate-in">
-    <div class="stat-card blue"><div class="stat-icon blue">👥</div><div><div class="stat-value">{{ total_users }}</div><div class="stat-label">Utilisateurs inscrits</div></div></div>
-    <div class="stat-card blue"><div class="stat-icon blue">📁</div><div><div class="stat-value">{{ total_fichiers }}</div><div class="stat-label">Fichiers stockés</div></div></div>
-    <div class="stat-card green"><div class="stat-icon green">✅</div><div><div class="stat-value">{{ fichiers_sains }}</div><div class="stat-label">Fichiers sains</div></div></div>
-    <div class="stat-card red"><div class="stat-icon red">🦠</div><div><div class="stat-value" style="color:#C0021A;">{{ fichiers_infectes }}</div><div class="stat-label">Menaces bloquées</div></div></div>
-    <div class="stat-card orange"><div class="stat-icon orange">💾</div><div><div class="stat-value" style="font-size:1.3rem;">{{ espace_total_utilise_gb }} GB</div><div class="stat-label">Stockage utilisé</div></div></div>
-    <div class="stat-card blue"><div class="stat-icon blue">📊</div><div><div class="stat-value" style="font-size:1.3rem;">{{ espace_total_alloue_gb }} GB</div><div class="stat-label">Stockage alloué</div></div></div>
-</div>
-
-<div class="section-header animate-in"><div class="section-title">Activité des 7 derniers jours</div></div>
-<div class="activity-row animate-in">
-    <div class="activity-card"><div class="activity-num" style="color:var(--edc-blue);">{{ uploads_recents }}</div><div class="activity-label">⬆ Uploads</div></div>
-    <div class="activity-card"><div class="activity-num" style="color:var(--edc-green-dark);">{{ telechargements_recents }}</div><div class="activity-label">⬇ Téléchargements</div></div>
-    <div class="activity-card"><div class="activity-num" style="color:#C0021A;">{{ menaces_recentes }}</div><div class="activity-label">🚫 Refus / Menaces</div></div>
-</div>
-
-<div class="tab-nav animate-in">
-    <button class="tab-btn active" onclick="showTab('users',this)">👥 Utilisateurs ({{ total_users }})</button>
-    <button class="tab-btn" onclick="showTab('logs',this)">📋 Derniers événements</button>
-</div>
-
-<div id="tab-users" class="tab-content active">
-    <div class="card" style="padding:0;">
-        <div class="table-wrapper">
-            <table>
-                <thead><tr><th>Utilisateur</th><th>E-mail</th><th>Inscription</th><th>Fichiers</th><th>Quota</th><th>Utilisation</th><th>Statut</th><th>Actions</th></tr></thead>
-                <tbody>
-                    {% for u in utilisateurs %}
-                    <tr class="{% if not u.is_active %}user-row-disabled{% endif %}">
-                        <td>
-                            <div style="display:flex;align-items:center;gap:8px;">
-                                <div style="width:32px;height:32px;border-radius:50%;background:var(--edc-blue);display:flex;align-items:center;justify-content:center;font-size:0.75rem;font-weight:700;color:white;text-transform:uppercase;flex-shrink:0;">{{ u.username|slice:":2" }}</div>
-                                <div>
-                                    <div style="font-weight:700;font-size:0.875rem;">
-    <a href="{% url 'admin_user_detail' u.id %}" style="color:var(--edc-blue);text-decoration:none;">
-        {{ u.username }}
-    </a>
-</div>
-                                    {% if u.is_superuser %}<span class="badge badge-orange" style="font-size:0.65rem;">Super Admin</span>
-                                    {% elif u.is_staff %}<span class="badge badge-info" style="font-size:0.65rem;">Staff</span>{% endif %}
-                                </div>
-                            </div>
-                        </td>
-                        <td style="font-size:0.82rem;color:var(--text-muted);">{{ u.email|default:"—" }}</td>
-                        <td style="font-size:0.8rem;color:var(--text-muted);white-space:nowrap;">{{ u.date_joined|date:"d/m/Y" }}</td>
-                        <td style="font-weight:700;text-align:center;">{{ u.fichiers.count }}</td>
-                        <td style="font-weight:700;white-space:nowrap;">{% if u.profil %}{{ u.profil.quota_gb }} GB{% else %}—{% endif %}</td>
-                        <td style="min-width:130px;">
-                            {% if u.profil %}
-                            <div style="font-size:0.75rem;color:var(--text-muted);">{{ u.profil.espace_utilise_mb }} MB · {{ u.profil.pourcentage_utilise }}%</div>
-                            <div class="mini-bar"><div class="mini-fill {% if u.profil.pourcentage_utilise > 85 %}warn{% endif %}" style="width:{{ u.profil.pourcentage_utilise }}%;"></div></div>
-                            {% else %}—{% endif %}
-                        </td>
-                        <td>{% if u.is_active %}<span class="badge badge-success">Actif</span>{% else %}<span class="badge badge-danger">Désactivé</span>{% endif %}</td>
-                        <td>
-                            <div style="display:flex;gap:4px;">
-                                <a href="{% url 'admin_allouer_quota' u.id %}" class="btn btn-secondary btn-sm" title="Modifier le quota">💾 Quota</a>
-                                <form method="post" action="{% url 'admin_toggle_user' u.id %}" onsubmit="return confirm('{% if u.is_active %}Désactiver{% else %}Activer{% endif %} le compte de {{ u.username }} ?');">
-                                    {% csrf_token %}
-                                    <button type="submit" class="btn btn-sm {% if u.is_active %}btn-danger{% else %}btn-green{% endif %}">{% if u.is_active %}🔴{% else %}🟢{% endif %}</button>
-                                </form>
-                            </div>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
+    <div class="actions">
+        <a href="{% url 'admin_logs' %}" class="btn btn-secondary">{% icone "list" "ic-sm" %}Journal complet</a>
+        <a href="{% url 'admin_performance' %}" class="btn btn-secondary">{% icone "gauge" "ic-sm" %}Performances</a>
+        <a href="{% url 'admin_config_extensions' %}" class="btn btn-secondary">{% icone "settings" "ic-sm" %}Règles de dépôt</a>
+        <a href="{% url 'admin_corbeille' %}" class="btn btn-secondary">{% icone "trash-2" "ic-sm" %}Corbeille générale</a>
     </div>
 </div>
 
-<div id="tab-logs" class="tab-content">
-    <div class="card" style="padding:0;">
-        <div class="table-wrapper">
-            <table>
-                <thead><tr><th>Date</th><th>Utilisateur</th><th>Action</th><th>Fichier</th><th>IP</th><th>Détail</th></tr></thead>
-                <tbody>
-                    {% for log in derniers_logs %}
-                    <tr {% if log.action == 'upload_refuse' or log.action == 'acces_refuse' %}class="log-danger"{% endif %}>
-                        <td style="font-size:0.78rem;color:var(--text-muted);white-space:nowrap;">{{ log.date_evenement|date:"d/m/Y H:i:s" }}</td>
-                        <td style="font-weight:600;font-size:0.85rem;">{{ log.utilisateur.username|default:"Anonyme" }}</td>
-                        <td style="font-size:0.83rem;font-weight:700;">
-                            {% if log.action == 'upload' %}<span style="color:var(--edc-green-dark);">⬆ Upload</span>
-                            {% elif log.action == 'telechargement' %}<span style="color:var(--edc-blue-mid);">⬇ Téléchargement</span>
-                            {% elif log.action == 'creation_lien' %}<span style="color:#6B4FBB;">🔗 Lien</span>
-                            {% elif log.action == 'upload_refuse' %}<span style="color:#C0021A;">🦠 Refusé</span>
-                            {% elif log.action == 'acces_refuse' %}<span style="color:#A0640A;">🚫 Accès refusé</span>
-                            {% elif log.action == 'suppression' %}<span style="color:#7A3E3E;">🗑 Suppression</span>
-                            {% else %}{{ log.get_action_display }}{% endif %}
-                        </td>
-                        <td style="font-size:0.83rem;">{{ log.fichier.nom_original|default:"—" }}</td>
-                        <td style="font-size:0.78rem;font-family:monospace;color:var(--text-muted);">{{ log.adresse_ip|default:"—" }}</td>
-                        <td style="font-size:0.8rem;color:var(--text-muted);">{{ log.detail|default:"—" }}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-        <div style="padding:1rem 1.4rem;border-top:1px solid var(--border-light);text-align:right;">
-            <a href="{% url 'admin_logs' %}" class="btn btn-secondary btn-sm">Voir tous les logs →</a>
-        </div>
+<div class="panneau chiffres">
+    <div class="chiffre"><div class="chiffre-valeur">{{ total_users }}</div><div class="chiffre-libelle">Utilisateurs</div></div>
+    <div class="chiffre"><div class="chiffre-valeur">{{ total_fichiers }}</div><div class="chiffre-libelle">Fichiers stockés</div></div>
+    <div class="chiffre"><div class="chiffre-valeur">{{ espace_total_utilise_gb }} Go</div><div class="chiffre-libelle">Utilisés sur {{ espace_total_alloue_gb }} Go alloués</div></div>
+    <div class="chiffre"><div class="chiffre-valeur">{{ uploads_recents }}</div><div class="chiffre-libelle">Dépôts (7&nbsp;jours)</div></div>
+    <div class="chiffre"><div class="chiffre-valeur">{{ telechargements_recents }}</div><div class="chiffre-libelle">Téléchargements (7&nbsp;jours)</div></div>
+    <div class="chiffre"><div class="chiffre-valeur{% if menaces_recentes %} alerte{% endif %}">{{ menaces_recentes }}</div><div class="chiffre-libelle">Refus et menaces (7&nbsp;jours)</div></div>
+</div>
+
+<div class="onglets" role="tablist">
+    <button class="onglet" role="tab" aria-selected="true" data-onglet="users">Utilisateurs ({{ total_users }})</button>
+    <button class="onglet" role="tab" aria-selected="false" data-onglet="logs">Derniers événements</button>
+</div>
+
+<div class="panneau onglet-contenu" id="onglet-users">
+    <div class="table-wrapper">
+        <table>
+            <thead>
+                <tr>
+                    <th>Utilisateur</th><th>E-mail</th><th>Inscrit le</th>
+                    <th class="col-num">Fichiers</th><th>Espace</th><th>État</th>
+                    <th class="col-actions"><span class="sr-only">Actions</span></th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for u in utilisateurs %}
+                <tr>
+                    <td><a href="{% url 'admin_user_detail' u.id %}">{{ u.username }}</a>{% if u.is_superuser %} <span class="badge badge-info">admin</span>{% endif %}</td>
+                    <td>{{ u.email|default:"—" }}</td>
+                    <td class="col-date">{{ u.date_joined|date:"d/m/Y" }}</td>
+                    <td class="col-num">{{ u.fichiers.count }}</td>
+                    <td>
+                        {% if u.profil %}
+                        <span class="{% if u.profil.pourcentage_utilise > 85 %}badge badge-warning{% endif %}">{{ u.profil.espace_utilise_mb }} Mo / {{ u.profil.quota_gb }} Go</span>
+                        {% else %}<span class="discret">—</span>{% endif %}
+                    </td>
+                    <td>{% if u.is_active %}<span class="badge badge-success">Actif</span>{% else %}<span class="badge badge-danger">Désactivé</span>{% endif %}</td>
+                    <td class="col-actions">
+                        <a class="btn btn-secondary btn-sm" href="{% url 'admin_allouer_quota' u.id %}">Quota</a>
+                        {% if not u.is_superuser %}
+                        <form method="post" action="{% url 'admin_toggle_user' u.id %}" style="display:inline"
+                              onsubmit="return confirm('{% if u.is_active %}Désactiver{% else %}Réactiver{% endif %} le compte {{ u.username|escapejs }} ?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-sm {% if u.is_active %}btn-danger{% else %}btn-secondary{% endif %}">{% if u.is_active %}Désactiver{% else %}Réactiver{% endif %}</button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="panneau onglet-contenu" id="onglet-logs" hidden>
+    <div class="table-wrapper">
+        <table>
+            <thead><tr><th>Date</th><th>Utilisateur</th><th>Action</th><th>Fichier</th><th>Adresse IP</th><th>Détail</th></tr></thead>
+            <tbody>
+            {% for log in derniers_logs %}
+                <tr>
+                    <td class="col-date">{{ log.date_evenement|date:"d/m/Y H:i:s" }}</td>
+                    <td>{{ log.utilisateur.username|default:"Anonyme" }}</td>
+                    <td>
+                        {% if log.action == 'upload_refuse' or log.action == 'acces_refuse' or log.action == 'fichier_altere' %}<span class="badge badge-danger">{{ log.get_action_display }}</span>
+                        {% else %}{{ log.get_action_display }}{% endif %}
+                    </td>
+                    <td>{{ log.nom_affiche|default:"—" }}</td>
+                    <td class="col-date">{{ log.adresse_ip|default:"—" }}</td>
+                    <td class="discret">{{ log.detail|default:"—" }}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
     </div>
 </div>
 {% endblock %}
 
-{% block extra_js %}
-<script>
-function showTab(name, btn) {
-    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    document.getElementById('tab-'+name).classList.add('active');
-    btn.classList.add('active');
-}
-</script>
-{% endblock %}

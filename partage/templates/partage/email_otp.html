@@ -1,39 +1,25 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head><meta charset="UTF-8"><title>Code de vérification Cloud EDC</title></head>
-<body style="margin:0;padding:0;background:#F0F4F8;font-family:Arial,sans-serif;">
-<table width="100%" cellpadding="0" cellspacing="0" style="padding:40px 20px;">
+<body style="margin:0;padding:0;background:#F4F6F9;font-family:'Segoe UI',Arial,sans-serif;color:#1D2733;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#F4F6F9;padding:24px 0;">
   <tr><td align="center">
-    <table width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;">
-      <tr><td style="background:#1B2F6E;border-radius:14px 14px 0 0;padding:24px 32px;text-align:center;">
-        <div style="color:white;font-size:1.2rem;font-weight:800;">Cloud EDC</div>
-        <div style="color:#E07B20;font-size:0.7rem;font-weight:600;text-transform:uppercase;letter-spacing:0.1em;margin-top:3px;">Electricity Development Corporation</div>
+    <table width="520" cellpadding="0" cellspacing="0" style="max-width:520px;width:100%;background:#FFFFFF;border:1px solid #D9DEE7;border-radius:6px;">
+      <tr><td style="background:#1B2F6E;border-bottom:3px solid #D9711C;padding:16px 24px;border-radius:6px 6px 0 0;">
+        <div style="color:#FFFFFF;font-size:16px;font-weight:600;">Cloud EDC</div>
+        <div style="color:#C9D1E6;font-size:12px;">Electricity Development Corporation</div>
       </td></tr>
-      <tr><td style="height:4px;background:linear-gradient(90deg,#00A86B,#E07B20);"></td></tr>
-      <tr><td style="background:white;padding:36px 32px;border-radius:0 0 14px 14px;">
-        <p style="color:#1A2B3C;font-size:1rem;font-weight:700;margin:0 0 8px;">Bonjour {{ user.username }} 👋</p>
-        <p style="color:#6B82A0;font-size:0.875rem;line-height:1.6;margin:0 0 28px;">Voici votre code de vérification pour accéder à votre espace <strong style="color:#1B2F6E;">Cloud EDC</strong> :</p>
-        <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
-          <tr><td align="center">
-            <div style="display:inline-block;background:#F0F4F8;border:2px solid #C8D8EC;border-radius:12px;padding:20px 40px;text-align:center;">
-              <div style="font-size:3.2rem;font-weight:900;letter-spacing:0.4em;color:#1B2F6E;font-family:'Courier New',monospace;line-height:1;">{{ code }}</div>
-              <div style="font-size:0.75rem;color:#6B82A0;margin-top:8px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;">Valable 10 minutes</div>
-            </div>
-          </td></tr>
-        </table>
-        <table width="100%" cellpadding="0" cellspacing="0" style="background:#FFF8E6;border:1px solid #FCDFA0;border-radius:10px;margin-bottom:20px;">
-          <tr><td style="padding:12px 16px;">
-            <p style="margin:0;font-size:0.8rem;color:#A0640A;line-height:1.5;">⚠ <strong>Sécurité :</strong> Ne communiquez jamais ce code à personne. L'équipe EDC ne vous le demandera jamais. Si vous n'êtes pas à l'origine de cette demande, ignorez cet email.</p>
-          </td></tr>
-        </table>
-        <p style="color:#94A3B8;font-size:0.78rem;text-align:center;margin:0;">Ce code expire automatiquement dans <strong>10 minutes</strong>.</p>
-      </td></tr>
-      <tr><td style="padding:16px 0;text-align:center;">
-        <p style="color:#94A3B8;font-size:0.75rem;margin:0;line-height:1.6;">
-          <strong style="color:#6B82A0;">Electricity Development Corporation (EDC)</strong><br>
-          Yaoundé, Cameroun<br>
-          <span style="font-size:0.7rem;">Email automatique — merci de ne pas répondre.</span>
+      <tr><td style="padding:24px;font-size:15px;line-height:1.5;">
+        <p style="margin:0 0 12px;">Bonjour {{ user.first_name|default:user.username }},</p>
+        <p style="margin:0 0 16px;">Voici votre code de vérification Cloud EDC :</p>
+        <p style="margin:0 0 16px;text-align:center;">
+          <span style="display:inline-block;font-family:Consolas,'Courier New',monospace;font-size:28px;letter-spacing:6px;padding:10px 18px;border:1px solid #D9DEE7;border-radius:4px;background:#F8F9FB;">{{ code }}</span>
         </p>
+        <p style="margin:0 0 12px;">Ce code est valable 10 minutes.</p>
+        <p style="margin:0;color:#4A5668;font-size:13px;">Ne le communiquez à personne : le service informatique d'EDC ne vous le demandera jamais. Si vous n'êtes pas à l'origine de cette demande, ignorez ce message.</p>
+      </td></tr>
+      <tr><td style="padding:14px 24px;border-top:1px solid #E8EBF0;color:#6B7686;font-size:12px;">
+        Electricity Development Corporation · Yaoundé<br>Message automatique, merci de ne pas y répondre.
       </td></tr>
     </table>
   </td></tr>

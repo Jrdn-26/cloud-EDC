@@ -1,6 +1,6 @@
+import hashlib
 import os
 import time
-import tempfile
 import logging
 from datetime import timedelta
 
@@ -9,41 +9,53 @@ from django.contrib import messages
 from django.contrib.auth import login, authenticate
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.auth.models import User
-from django.core.files.base import ContentFile
 from django.core.mail import send_mail
 from django.db.models import Sum
-from django.http import FileResponse, Http404, HttpResponse
+from django.http import FileResponse, Http404, HttpResponse, JsonResponse, StreamingHttpResponse
+from django.urls import reverse
+from django.utils.http import content_disposition_header
 from django.shortcuts import render, redirect, get_object_or_404
 from django.template.loader import render_to_string
 from django.utils import timezone
 
-from django.views.decorators.csrf import csrf_exempt
-from .antivirus import scanner_fichier, get_statut_clamav
-from .encryption import chiffrer_en_memoire, dechiffrer_en_memoire
+from .antivirus import scanner_fichier, get_statut_clamav, ScanIndisponible, ScanErreur
+from .encryption import (chiffrer_flux, dechiffrer_en_memoire, dechiffrer_fichier_v2,
+                         est_format_v2, taille_claire_v2, verifier_fichier_v2)
 from .forms import (
     InscriptionForm, UploadFichierForm, CreerLienForm,
     AllouerQuotaForm, VerifierOTPForm,
     MotDePasseOublieForm, NouveauMotDePasseForm,
 )
-from .models import Fichier, LienPartage, LogAcces, ProfilUtilisateur, CodeOTP, ConfigurationCloud
+from .models import (Fichier, LienPartage, LogAcces, ProfilUtilisateur, CodeOTP,
+                     ConfigurationCloud, chemin_upload)
+from .conservation import effacer_du_disque, effacer_pour_utilisateur, purger_fichiers_expires
 from django_ratelimit.decorators import ratelimit
 
 logger = logging.getLogger(__name__)
 
 
 def get_ip(request):
-    x = request.META.get('HTTP_X_FORWARDED_FOR')
-    return x.split(',')[0].strip() if x else request.META.get('REMOTE_ADDR')
+    """Adresse IP reelle du client.
+
+    Nginx ecrit X-Real-IP avec $remote_addr et ecrase toute valeur envoyee par
+    le client. On ne lit jamais X-Forwarded-For, qui peut etre falsifie.
+    """
+    return request.META.get('HTTP_X_REAL_IP') or request.META.get('REMOTE_ADDR')
 
 
-def journaliser(request, action, fichier=None, lien=None, detail=''):
+def journaliser(request, action, fichier=None, lien=None, detail='', nom=None, taille=None, utilisateur=None):
+    """Enregistre un événement. Le nom, la taille et l'empreinte du fichier sont
+    recopiés dans le journal pour qu'il reste probant après l'effacement du fichier."""
     LogAcces.objects.create(
-        utilisateur=request.user if request.user.is_authenticated else None,
+        utilisateur=utilisateur or (request.user if request.user.is_authenticated else None),
         adresse_ip=get_ip(request),
         action=action,
         fichier=fichier,
         lien=lien,
-        detail=detail,
+        detail=detail[:255],
+        nom_fichier=(nom if nom is not None else (fichier.nom_original if fichier else ''))[:255],
+        taille_fichier=taille if taille is not None else (fichier.taille if fichier else None),
+        empreinte_fichier=fichier.empreinte_sha256 if fichier else '',
     )
 
 
@@ -77,10 +89,10 @@ def _envoyer_otp(user, code):
             html_message=corps_html,
             fail_silently=False,
         )
-        logger.info(f"✅ OTP envoyé à {user.email}")
+        logger.info(f"Code OTP envoyé à {user.email}")
         return True
     except Exception as e:
-        logger.error(f"❌ Erreur envoi OTP à {user.email} : {e}")
+        logger.error(f"Échec de l'envoi du code OTP à {user.email} : {e}")
         return False
 
 
@@ -107,10 +119,10 @@ def inscription(request):
             _envoyer_otp(user, otp.code)
             request.session['otp_user_id'] = user.id
             request.session['otp_context'] = 'inscription'
-            messages.info(request, f"📧 Code de vérification envoyé à {_masquer_email(user.email)}.")
+            messages.info(request, f"Un code de vérification a été envoyé à {_masquer_email(user.email)}.")
             return redirect('verifier_otp')
         else:
-            messages.error(request, "❌ Des erreurs sont présentes.")
+            messages.error(request, "Le formulaire contient des erreurs.")
     else:
         form = InscriptionForm()
     return render(request, 'partage/inscription.html', {'form': form})
@@ -124,44 +136,32 @@ def connexion_2fa(request):
         email    = request.POST.get('email', '').strip().lower()
         password = request.POST.get('password', '')
 
-        try:
-            user_obj = User.objects.get(email__iexact=email)
-        except User.DoesNotExist:
-            messages.error(request, f"❌ Aucun compte n'est associé à l'adresse « {email} ». Vérifiez votre saisie ou créez un compte.")
-            return render(request, 'partage/connexion.html', {
-                'email_not_found': True,
-                'email_saisi': email,
-            })
-        except User.MultipleObjectsReturned:
-            messages.error(request, "❌ Erreur : plusieurs comptes utilisent cet email. Contactez l'administrateur.")
-            return render(request, 'partage/connexion.html', {'email_not_found': False, 'email_saisi': ''})
-
-        user = authenticate(request, username=user_obj.username, password=password)
+        message_echec = "Adresse e-mail ou mot de passe incorrect."
+        user_obj = User.objects.filter(email__iexact=email).first()
+        user = None
+        if user_obj is not None:
+            user = authenticate(request, username=user_obj.username, password=password)
 
         if user is not None:
-            if not user.is_active:
-                messages.error(request, "❌ Ce compte est désactivé.")
-                return render(request, 'partage/connexion.html', {'email_not_found': False, 'email_saisi': ''})
-
-            ip        = get_ip(request)
-            est_local = ip in ('127.0.0.1', '::1', 'localhost')
-            if (user.is_superuser or user.is_staff) and est_local:
-                login(request, user)
-                messages.success(request, f"✅ Connexion admin. Bon retour, {user.username} !")
-                return redirect('mes_fichiers')
-
+            # Tous les comptes, administrateurs compris, passent par l'OTP.
             otp = CodeOTP.generer(user)
             _envoyer_otp(user, otp.code)
             request.session['otp_user_id'] = user.id
             request.session['otp_context'] = 'connexion'
-            messages.info(request, f"📧 Code envoyé à {_masquer_email(user.email)}. Valable 10 minutes.")
+            messages.info(request, f"Un code de vérification a été envoyé à {_masquer_email(user.email)}. Il est valable 10 minutes.")
             return redirect('verifier_otp')
+
+        if user_obj is not None and not user_obj.is_active and user_obj.check_password(password):
+            journaliser(request, 'connexion_echec', utilisateur=user_obj, detail='Compte désactivé')
+            messages.error(request, "Ce compte est désactivé. Contactez le service informatique.")
         else:
-            messages.error(request, "❌ Mot de passe incorrect.")
+            journaliser(request, 'connexion_echec', utilisateur=user_obj,
+                        detail=f"Adresse saisie : {email[:120]}" if user_obj is None else 'Mot de passe incorrect')
+            messages.error(request, message_echec)
+        return render(request, 'partage/connexion.html', {'email_saisi': email})
 
-    return render(request, 'partage/connexion.html', {'email_not_found': False, 'email_saisi': ''})
+    return render(request, 'partage/connexion.html')
 
-@csrf_exempt
 @ratelimit(key='ip', rate='10/5m', method='POST', block=True)
 def verifier_otp(request):
     user_id = request.session.get('otp_user_id')
@@ -177,32 +177,32 @@ def verifier_otp(request):
     if request.method == 'POST':
         form = VerifierOTPForm(request.POST)
         if form.is_valid():
-            code_saisi = form.cleaned_data['code']
-            otp = CodeOTP.objects.filter(
-                utilisateur=user, code=code_saisi, utilise=False,
-            ).last()
+            resultat = CodeOTP.verifier(user, form.cleaned_data['code'])
 
-            if otp and otp.est_valide():
-                otp.utilise = True
-                otp.save()
+            if resultat == 'ok':
                 contexte = request.session.pop('otp_context', 'connexion')
+                next_url = request.session.pop('next_after_login', None)
                 del request.session['otp_user_id']
                 login(request, user)
+                journaliser(request, 'connexion', detail='Connexion avec code de vérification')
                 if contexte == 'inscription':
-                    messages.success(request, f"🎉 Bienvenue {user.username} ! Compte vérifié.")
+                    messages.success(request, f"Compte vérifié. Bienvenue, {user.username}.")
                 else:
-                    messages.success(request, f"✅ Connexion réussie. Bon retour, {user.username} !")
+                    messages.success(request, f"Vous êtes connecté en tant que {user.username}.")
 
-                # Redirection vers le lien partagé si présent
-                next_url = request.session.pop('next_after_login', None)
-                if next_url:
-                    messages.info(request, "🎯 Redirection vers le fichier partagé...")
+                # Redirection vers le lien partagé si présent (chemin interne uniquement)
+                if next_url and next_url.startswith('/') and not next_url.startswith('//'):
+                    messages.info(request, "Vous pouvez maintenant accéder au fichier partagé.")
                     return redirect(next_url)
                 return redirect('mes_fichiers')
-            elif otp and not otp.est_valide():
-                messages.error(request, "⏰ Code expiré.")
+            journaliser(request, 'otp_echec', utilisateur=user, detail={
+                'bloque': 'Code bloqué après 5 erreurs', 'expire': 'Code expiré'}.get(resultat, 'Code incorrect'))
+            if resultat == 'bloque':
+                messages.error(request, "Trop de tentatives incorrectes. Demandez un nouveau code.")
+            elif resultat == 'expire':
+                messages.error(request, "Ce code a expiré. Demandez un nouveau code.")
             else:
-                messages.error(request, "❌ Code incorrect.")
+                messages.error(request, "Code incorrect.")
     else:
         form = VerifierOTPForm()
 
@@ -211,8 +211,6 @@ def verifier_otp(request):
         'email_masque': _masquer_email(user.email),
     })
 
-@csrf_exempt
-@csrf_exempt
 @ratelimit(key='ip', rate='3/5m', method='POST', block=True)
 def renvoyer_otp(request):
     """Renvoie un nouveau code OTP."""
@@ -225,9 +223,9 @@ def renvoyer_otp(request):
         otp = CodeOTP.generer(user)
         succes = _envoyer_otp(user, otp.code)
         if succes:
-            messages.success(request, f"📧 Nouveau code envoyé à {_masquer_email(user.email)}.")
+            messages.success(request, f"Un nouveau code a été envoyé à {_masquer_email(user.email)}.")
         else:
-            messages.error(request, "⚠️ Impossible d'envoyer l'email. Vérifiez la configuration Gmail.")
+            messages.error(request, "Le code n'a pas pu être envoyé. Réessayez dans quelques minutes ou contactez le service informatique.")
     except User.DoesNotExist:
         messages.error(request, "Utilisateur introuvable.")
         return redirect('connexion')
@@ -243,81 +241,80 @@ def mot_de_passe_oublie(request):
         form = MotDePasseOublieForm(request.POST)
         if form.is_valid():
             email = form.cleaned_data['email'].lower()
-            try:
-                user = User.objects.get(email__iexact=email)
+            user = User.objects.filter(email__iexact=email, is_active=True).first()
+            if user is not None:
                 otp = CodeOTP.generer(user)
                 _envoyer_otp(user, otp.code)
-                request.session['reset_user_id'] = user.id
-                messages.info(request, f"📧 Code envoyé à {_masquer_email(email)}.")
-                return redirect('reinitialiser_mdp')
-            except User.DoesNotExist:
-                messages.info(request, "📧 Si un compte est associé à cet email, vous recevrez un code.")
+            # Même réponse que le compte existe ou non (pas de fuite d'information).
+            request.session['reset_user_id'] = user.id if user else None
+            request.session['reset_email'] = email
+            messages.info(request, "Si un compte est associé à cette adresse, un code vient d'y être envoyé.")
+            return redirect('reinitialiser_mdp')
     else:
         form = MotDePasseOublieForm()
 
     return render(request, 'partage/mot_de_passe_oublie.html', {'form': form})
 
 
+@ratelimit(key='ip', rate='10/5m', method='POST', block=True)
 def reinitialiser_mdp(request):
-    user_id = request.session.get('reset_user_id')
-    if not user_id:
+    if 'reset_email' not in request.session:
         messages.error(request, "Session expirée.")
         return redirect('mot_de_passe_oublie')
 
-    try:
-        user = User.objects.get(id=user_id)
-    except User.DoesNotExist:
-        return redirect('mot_de_passe_oublie')
+    user_id = request.session.get('reset_user_id')
+    user = User.objects.filter(id=user_id).first() if user_id else None
+    contexte = {'email_masque': _masquer_email(request.session.get('reset_email'))}
 
     if request.method == 'POST':
         code_saisi = request.POST.get('code', '').strip()
         form       = NouveauMotDePasseForm(request.POST)
+        contexte['form'] = form
 
-        otp = CodeOTP.objects.filter(
-            utilisateur=user, code=code_saisi, utilise=False,
-        ).last()
+        if not form.is_valid():
+            return render(request, 'partage/reinitialiser_mdp.html', contexte)
 
-        if not otp:
-            messages.error(request, "❌ Code incorrect.")
-            return render(request, 'partage/reinitialiser_mdp.html', {
-                'form': form, 'email_masque': _masquer_email(user.email)
-            })
-
-        if not otp.est_valide():
-            messages.error(request, "⏰ Code expiré.")
-            return redirect('mot_de_passe_oublie')
-
-        if form.is_valid():
-            nouveau_mdp = form.cleaned_data['password1']
-            otp.utilise = True
-            otp.save()
-            user.set_password(nouveau_mdp)
+        resultat = CodeOTP.verifier(user, code_saisi)
+        if resultat == 'ok':
+            user.set_password(form.cleaned_data['password1'])
             user.save()
-            del request.session['reset_user_id']
-            messages.success(request, "✅ Mot de passe réinitialisé !")
+            request.session.pop('reset_user_id', None)
+            request.session.pop('reset_email', None)
+            logger.info(f"Mot de passe réinitialisé pour {user.username} depuis {get_ip(request)}")
+            messages.success(request, "Votre mot de passe a été modifié. Vous pouvez vous connecter.")
             return redirect('connexion')
-        else:
-            return render(request, 'partage/reinitialiser_mdp.html', {
-                'form': form, 'email_masque': _masquer_email(user.email)
-            })
-    else:
-        form = NouveauMotDePasseForm()
+        journaliser(request, 'otp_echec', utilisateur=user,
+                    detail=f"Réinitialisation du mot de passe : {'code ' + resultat if resultat != 'incorrect' else 'code incorrect'}")
+        if resultat in ('bloque', 'expire'):
+            messages.error(request, "Code expiré ou trop de tentatives. Recommencez la demande.")
+            return redirect('mot_de_passe_oublie')
+        messages.error(request, "Code incorrect.")
+        return render(request, 'partage/reinitialiser_mdp.html', contexte)
 
-    return render(request, 'partage/reinitialiser_mdp.html', {
-        'form': form, 'email_masque': _masquer_email(user.email),
-    })
+    contexte['form'] = NouveauMotDePasseForm()
+    return render(request, 'partage/reinitialiser_mdp.html', contexte)
 
 
 @login_required
 def mes_fichiers(request):
     fichiers = Fichier.objects.filter(proprietaire=request.user, supprime=False)
     profil   = request.user.profil
-    nb_corbeille = Fichier.objects.filter(proprietaire=request.user, supprime=True).count()
+    nb_corbeille = Fichier.objects.filter(proprietaire=request.user, supprime=True,
+                                       efface_par_utilisateur__isnull=True).count()
     return render(request, 'partage/mes_fichiers.html', {
         'fichiers': fichiers,
         'profil': profil,
         'nb_corbeille': nb_corbeille,
     })
+
+
+def _fin_depot(request, nom_url):
+    """Fin d'un dépôt : redirection classique, ou adresse en JSON si la page a envoyé
+    les fichiers en arrière-plan (barre de progression). Les messages restent en
+    attente et s'affichent sur la page suivante."""
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return JsonResponse({'redirection': reverse(nom_url)})
+    return redirect(nom_url)
 
 
 @login_required
@@ -332,8 +329,8 @@ def upload_fichier(request):
         fichiers_recus = request.FILES.getlist('fichiers')
 
         if not fichiers_recus:
-            messages.error(request, "❌ Aucun fichier sélectionné.")
-            return redirect('upload_fichier')
+            messages.error(request, "Aucun fichier sélectionné.")
+            return _fin_depot(request, 'upload_fichier')
 
         succes = 0
         erreurs = []
@@ -367,48 +364,65 @@ def upload_fichier(request):
             dossier_utilisateur = os.path.join(settings.MEDIA_ROOT, 'CLOUD EDC', request.user.username)
             os.makedirs(dossier_utilisateur, exist_ok=True)
 
-            contenu_original        = f.read()
-            contenu_chiffre, iv_hex = chiffrer_en_memoire(contenu_original)
+            # 1. Analyse antivirus AVANT tout stockage. Le fichier est lu par blocs
+            #    de 1 Mo depuis le fichier temporaire de Django : la mémoire
+            #    utilisée reste la même quelle que soit sa taille.
+            try:
+                f.seek(0)
+                statut, signature = scanner_fichier(f)
+            except ScanIndisponible:
+                logger.error("Dépôt refusé : ClamAV injoignable.")
+                journaliser(request, 'upload_refuse', detail='Antivirus indisponible', nom=nom, taille=f.size)
+                erreurs.append(f"« {nom} » — antivirus indisponible, dépôt refusé. Réessayez plus tard.")
+                continue
+            except ScanErreur as e:
+                journaliser(request, 'upload_refuse', detail=f'Erreur antivirus : {e}', nom=nom, taille=f.size)
+                erreurs.append(
+                    f"« {nom} » — l'antivirus n'a pas pu analyser ce fichier "
+                    f"(il est peut-être trop volumineux). Dépôt refusé."
+                )
+                continue
 
-            suffix = os.path.splitext(nom)[1] or '.tmp'
-            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-                tmp.write(contenu_original)
-                chemin_tmp = tmp.name
+            if statut == 'infecte':
+                journaliser(request, 'upload_refuse', detail=f'Menace : {signature}', nom=nom, taille=f.size)
+                erreurs.append(f"« {nom} » — menace détectée par l'antivirus ({signature}). Dépôt refusé.")
+                continue
 
+            # 2. Chiffrement AES-256-GCM par blocs, écrit directement à son
+            #    emplacement définitif (via un fichier « .partiel » renommé à la fin).
             fichier_obj = Fichier(
                 proprietaire=request.user,
                 nom_original=nom,
                 taille=f.size,
-                statut_scan='en_attente',
+                statut_scan='sain',
                 est_chiffre=True,
-                iv_chiffrement=iv_hex,
             )
-            fichier_obj.fichier.save(nom + '.enc', ContentFile(contenu_chiffre), save=False)
-            fichier_obj.save()
-
+            stockage = fichier_obj.fichier.storage
+            nom_stockage = stockage.get_available_name(chemin_upload(fichier_obj, nom))
+            chemin_final = stockage.path(nom_stockage)
+            chemin_partiel = chemin_final + '.partiel'
+            os.makedirs(os.path.dirname(chemin_final), exist_ok=True)
             try:
-                statut, signature = scanner_fichier(chemin_tmp)
-            except Exception as e:
-                if os.path.exists(chemin_tmp):
-                    os.unlink(chemin_tmp)
-                fichier_obj.fichier.delete(save=False)
-                fichier_obj.delete()
-                erreurs.append(f"« {nom} » — erreur antivirus.")
+                f.seek(0)
+                empreinte = hashlib.sha256()
+                with open(chemin_partiel, 'wb') as destination:
+                    fichier_obj.iv_chiffrement = chiffrer_flux(f, destination, empreinte=empreinte)
+                    destination.flush()
+                    os.fsync(destination.fileno())
+                fichier_obj.empreinte_sha256 = empreinte.hexdigest()
+                os.replace(chemin_partiel, chemin_final)
+                fichier_obj.fichier.name = nom_stockage
+                fichier_obj.save()
+            except Exception:
+                logger.exception(f"Échec de l'enregistrement de « {nom} »")
+                for chemin in (chemin_partiel, chemin_final):
+                    if os.path.exists(chemin) and not Fichier.objects.filter(fichier=nom_stockage).exists():
+                        os.unlink(chemin)
+                erreurs.append(f"« {nom} » — erreur lors de l'enregistrement. Réessayez ou contactez le service informatique.")
                 continue
-            finally:
-                if os.path.exists(chemin_tmp):
-                    os.unlink(chemin_tmp)
 
-            if statut == 'infecte':
-                fichier_obj.fichier.delete(save=False)
-                fichier_obj.delete()
-                journaliser(request, 'upload_refuse', detail=f'Virus: {signature}')
-                erreurs.append(f"🦠 « {nom} » — menace : {signature}.")
-                continue
-
-            fichier_obj.statut_scan = 'sain'
             fichier_obj.duree_upload = time.time() - debut_upload
-            fichier_obj.save()
+            fichier_obj.save(update_fields=['duree_upload'])
             profil.espace_utilise += f.size
             profil.save()
             journaliser(request, 'upload', fichier=fichier_obj,
@@ -416,11 +430,11 @@ def upload_fichier(request):
             succes += 1
 
         if succes:
-            messages.success(request, f"✅ {succes} fichier(s) uploadé(s) !")
+            messages.success(request, f"{succes} fichier{'s' if succes > 1 else ''} déposé{'s' if succes > 1 else ''}.")
         for err in erreurs:
-            messages.error(request, f"❌ {err}")
+            messages.error(request, err)
 
-        return redirect('mes_fichiers')
+        return _fin_depot(request, 'mes_fichiers')
 
     return render(request, 'partage/upload.html', {
         'profil': profil,
@@ -439,78 +453,76 @@ def supprimer_fichier(request, fichier_id):
         fichier_obj.date_suppression = timezone.now()
         fichier_obj.save()
         journaliser(request, 'suppression', fichier=fichier_obj, detail=f'Mis à la corbeille : {nom}')
-        messages.success(request, f"🗑️ « {nom} » déplacé dans la corbeille. Restauration possible pendant 30 jours.")
+        messages.success(request, f"« {nom} » a été placé dans la corbeille. Vous pouvez le restaurer pendant 30 jours.")
     return redirect('mes_fichiers')
 
 
 @login_required
 def corbeille(request):
-    """Affiche les fichiers supprimés de l'utilisateur."""
-    fichiers = Fichier.objects.filter(proprietaire=request.user, supprime=True).order_by('-date_suppression')
-    profil = request.user.profil
-    # Purge automatique : fichiers supprimés depuis > 30 jours
+    """Affiche la corbeille de l'utilisateur.
+
+    Au-delà de 30 jours, un fichier quitte la corbeille : il est retiré du compte
+    et entre en période de conservation (voir conservation.py).
+    """
     limite = timezone.now() - timedelta(days=30)
-    a_purger = Fichier.objects.filter(proprietaire=request.user, supprime=True, date_suppression__lt=limite)
-    for f in a_purger:
-        taille = f.taille
-        f.fichier.delete(save=False)
-        f.delete()
-        profil.espace_utilise = max(0, profil.espace_utilise - taille)
-        profil.save()
+    for f in Fichier.objects.filter(proprietaire=request.user, supprime=True,
+                                    efface_par_utilisateur__isnull=True, date_suppression__lt=limite):
+        effacer_pour_utilisateur(f)
+        journaliser(request, 'suppression', fichier=f, detail='Retiré de la corbeille après 30 jours')
+    fichiers = Fichier.objects.filter(proprietaire=request.user, supprime=True,
+                                      efface_par_utilisateur__isnull=True).order_by('-date_suppression')
     return render(request, 'partage/corbeille.html', {
         'fichiers': fichiers,
-        'profil': profil,
+        'profil': request.user.profil,
+        'duree_conservation': ConfigurationCloud.get_config().duree_conservation_jours,
     })
 
 
 @login_required
 def restaurer_fichier(request, fichier_id):
     """Restaure un fichier depuis la corbeille."""
-    fichier_obj = get_object_or_404(Fichier, id=fichier_id, proprietaire=request.user, supprime=True)
+    fichier_obj = get_object_or_404(Fichier, id=fichier_id, proprietaire=request.user, supprime=True,
+                                    efface_par_utilisateur__isnull=True)
     if request.method == 'POST':
         nom = fichier_obj.nom_original
         fichier_obj.supprime = False
         fichier_obj.date_suppression = None
         fichier_obj.save()
         journaliser(request, 'restauration', fichier=fichier_obj, detail=f'Restauré : {nom}')
-        messages.success(request, f"♻️ « {nom} » restauré avec succès !")
+        messages.success(request, f"« {nom} » a été restauré.")
     return redirect('corbeille')
 
 
 @login_required
 def supprimer_definitivement(request, fichier_id):
-    """Supprime définitivement un fichier de la corbeille."""
-    fichier_obj = get_object_or_404(Fichier, id=fichier_id, proprietaire=request.user, supprime=True)
+    """Retire définitivement un fichier de la corbeille de l'utilisateur.
+
+    Le fichier n'est plus accessible à l'utilisateur ni par ses liens de partage,
+    mais EDC le conserve (chiffré) pendant la durée fixée avant de l'effacer.
+    """
+    fichier_obj = get_object_or_404(Fichier, id=fichier_id, proprietaire=request.user, supprime=True,
+                                    efface_par_utilisateur__isnull=True)
     if request.method == 'POST':
-        nom = fichier_obj.nom_original
-        taille = fichier_obj.taille
-        fichier_obj.fichier.delete(save=False)
-        fichier_obj.delete()
-        profil = request.user.profil
-        profil.espace_utilise = max(0, profil.espace_utilise - taille)
-        profil.save()
-        journaliser(request, 'suppression', detail=f'Supprimé définitivement : {nom}')
-        messages.success(request, f"💥 « {nom} » supprimé définitivement.")
+        fin = effacer_pour_utilisateur(fichier_obj)
+        journaliser(request, 'suppression', fichier=fichier_obj,
+                    detail=f"Supprimé définitivement par l'utilisateur — conservé jusqu'au {fin:%d/%m/%Y}")
+        messages.success(request, f"« {fichier_obj.nom_original} » a été supprimé de votre espace.")
     return redirect('corbeille')
 
 
 @login_required
 def vider_corbeille(request):
-    """Vide entièrement la corbeille de l'utilisateur."""
+    """Vide la corbeille de l'utilisateur (mêmes règles que supprimer_definitivement)."""
     if request.method == 'POST':
-        fichiers = Fichier.objects.filter(proprietaire=request.user, supprime=True)
-        profil = request.user.profil
-        total_taille = 0
+        fichiers = Fichier.objects.filter(proprietaire=request.user, supprime=True,
+                                          efface_par_utilisateur__isnull=True)
         count = 0
         for f in fichiers:
-            total_taille += f.taille
-            f.fichier.delete(save=False)
-            f.delete()
+            fin = effacer_pour_utilisateur(f)
+            journaliser(request, 'suppression', fichier=f,
+                        detail=f"Corbeille vidée par l'utilisateur — conservé jusqu'au {fin:%d/%m/%Y}")
             count += 1
-        profil.espace_utilise = max(0, profil.espace_utilise - total_taille)
-        profil.save()
-        journaliser(request, 'suppression', detail=f'Corbeille vidée : {count} fichier(s)')
-        messages.success(request, f"💥 Corbeille vidée : {count} fichier(s) supprimé(s) définitivement.")
+        messages.success(request, f"Corbeille vidée : {count} fichier{'s' if count > 1 else ''} supprimé{'s' if count > 1 else ''} de votre espace.")
     return redirect('corbeille')
 
 
@@ -518,7 +530,7 @@ def vider_corbeille(request):
 def creer_lien(request, fichier_id):
     fichier_obj = get_object_or_404(Fichier, id=fichier_id, proprietaire=request.user)
     if fichier_obj.statut_scan != 'sain':
-        messages.error(request, "❌ Fichier non validé.")
+        messages.error(request, "Ce fichier n'a pas été validé par l'antivirus et ne peut pas être partagé.")
         return redirect('mes_fichiers')
 
     if request.method == 'POST':
@@ -567,46 +579,88 @@ def telecharger_via_lien(request, token):
     if not os.path.exists(lien.fichier.fichier.path):
         journaliser(request, 'acces_refuse', fichier=lien.fichier, lien=lien,
                     detail='Fichier physique introuvable')
-        messages.error(request, "Fichier temporairement indisponible.")
-        return render(request, 'partage/lien_expire.html', status=503)
+        return render(request, 'partage/lien_expire.html', {'indisponible': True}, status=503)
 
+    if not _fichier_intact(request, lien.fichier, lien=lien):
+        return render(request, 'partage/lien_expire.html', {'indisponible': True}, status=503)
     lien.nb_telechargements += 1
     lien.save()
     journaliser(request, 'telechargement', fichier=lien.fichier, lien=lien,
                 detail=f'Téléchargé par {request.user.username} ({request.user.email})')
-    return _servir_fichier(lien.fichier)
+    return _servir_fichier(lien.fichier, deja_verifie=True)
 
 
 @login_required
 def telecharger_fichier(request, fichier_id):
     fichier_obj = get_object_or_404(Fichier, id=fichier_id, proprietaire=request.user)
     if fichier_obj.supprime:
-        messages.error(request, "❌ Ce fichier est dans la corbeille.")
+        messages.error(request, "Ce fichier est dans la corbeille.")
         return redirect('mes_fichiers')
     if fichier_obj.statut_scan != 'sain':
-        messages.error(request, "❌ Ce fichier ne peut pas être téléchargé.")
+        messages.error(request, "Ce fichier ne peut pas être téléchargé.")
+        return redirect('mes_fichiers')
+    if not _fichier_intact(request, fichier_obj):
+        messages.error(request, "Ce fichier a été modifié sur le disque depuis son dépôt : il ne peut pas "
+                                "être envoyé. L'incident est inscrit au journal.")
         return redirect('mes_fichiers')
     journaliser(request, 'telechargement', fichier=fichier_obj)
-    return _servir_fichier(fichier_obj)
+    return _servir_fichier(fichier_obj, deja_verifie=True)
 
 
-def _servir_fichier(fichier_obj):
-    """Sert le fichier déchiffré depuis son emplacement CLOUD EDC/<username>/."""
+def _fichier_intact(request, fichier_obj, lien=None):
+    """Vérifie l'étiquette d'authentification AES-GCM du fichier avant tout envoi.
+
+    Un fichier modifié sur le disque n'est jamais envoyé, et le refus est inscrit
+    au journal (« Fichier altéré, envoi refusé ») au lieu d'un téléchargement.
+    """
+    if not (fichier_obj.est_chiffre and fichier_obj.iv_chiffrement and est_format_v2(fichier_obj.iv_chiffrement)):
+        return True
+    try:
+        verifier_fichier_v2(fichier_obj.fichier.path, fichier_obj.iv_chiffrement)
+        return True
+    except Exception as e:
+        logger.error(f"Fichier #{fichier_obj.id} illisible ou modifié : {e}")
+        journaliser(request, 'fichier_altere', fichier=fichier_obj, lien=lien,
+                    detail="Contrôle d'intégrité échoué : envoi refusé")
+        return False
+
+
+def _servir_fichier(fichier_obj, deja_verifie=False):
+    """Envoie le fichier déchiffré à l'utilisateur.
+
+    Format actuel (AES-256-GCM) : le fichier est d'abord relu en entier pour
+    vérifier son étiquette d'authentification, puis déchiffré et envoyé par
+    blocs de 1 Mo. Aucun octet n'est envoyé si le fichier a été modifié, et
+    la mémoire utilisée ne dépend pas de la taille du fichier.
+    """
+    chemin = fichier_obj.fichier.path
     if fichier_obj.est_chiffre and fichier_obj.iv_chiffrement:
-        try:
-            with open(fichier_obj.fichier.path, 'rb') as f:
-                contenu_chiffre = f.read()
-            contenu_clair = dechiffrer_en_memoire(contenu_chiffre, fichier_obj.iv_chiffrement)
+        if est_format_v2(fichier_obj.iv_chiffrement):
+            try:
+                if not deja_verifie:
+                    verifier_fichier_v2(chemin, fichier_obj.iv_chiffrement)
+                taille = taille_claire_v2(chemin)
+            except Exception as e:
+                logger.error(f"Fichier #{fichier_obj.id} illisible ou modifié : {e}")
+                raise Http404("Fichier indisponible.")
+            response = StreamingHttpResponse(
+                dechiffrer_fichier_v2(chemin, fichier_obj.iv_chiffrement),
+                content_type='application/octet-stream',
+            )
+            response['Content-Length'] = str(taille)
+        else:
+            # Ancien format (AES-CBC) : fichiers déposés avant la migration, traités en mémoire.
+            try:
+                with open(chemin, 'rb') as f:
+                    contenu_clair = dechiffrer_en_memoire(f.read(), fichier_obj.iv_chiffrement)
+            except Exception as e:
+                logger.error(f"Déchiffrement impossible du fichier #{fichier_obj.id} : {e}")
+                raise Http404("Fichier indisponible.")
             response = HttpResponse(contenu_clair, content_type='application/octet-stream')
-            response['Content-Disposition'] = f'attachment; filename="{fichier_obj.nom_original}"'
-            return response
-        except Exception as e:
-            raise Http404(f"Impossible de déchiffrer : {e}")
-    return FileResponse(
-        open(fichier_obj.fichier.path, 'rb'),
-        as_attachment=True,
-        filename=fichier_obj.nom_original,
-    )
+        response['Content-Disposition'] = content_disposition_header(True, fichier_obj.nom_original)
+        response['X-Content-Type-Options'] = 'nosniff'
+        return response
+    return FileResponse(open(chemin, 'rb'), as_attachment=True, filename=fichier_obj.nom_original)
 
 
 @login_required
@@ -648,7 +702,7 @@ def admin_allouer_quota(request, user_id):
             quota_gb = form.cleaned_data['quota_final_gb']
             profil.quota_octets = int(quota_gb * 1024 ** 3)
             profil.save()
-            messages.success(request, f"✅ Quota de {utilisateur.username} : {quota_gb} GB.")
+            messages.success(request, f"Quota de {utilisateur.username} fixé à {quota_gb} Go.")
             return redirect('admin_dashboard')
     else:
         form = AllouerQuotaForm()
@@ -667,7 +721,7 @@ def admin_supprimer_fichier(request, fichier_id):
         fichier_obj.date_suppression = timezone.now()
         fichier_obj.save()
         journaliser(request, 'suppression', fichier=fichier_obj, detail=f'Admin : mis à la corbeille {nom}')
-        messages.success(request, f"🗑️ « {nom} » déplacé dans la corbeille.")
+        messages.success(request, f"« {nom} » a été placé dans la corbeille.")
     return redirect('admin_dashboard')
 
 
@@ -679,15 +733,24 @@ def admin_toggle_user(request, user_id):
         return redirect('admin_dashboard')
     utilisateur.is_active = not utilisateur.is_active
     utilisateur.save()
-    etat = "activé" if utilisateur.is_active else "désactivé"
-    messages.success(request, f"✅ Compte de {utilisateur.username} {etat}.")
+    etat = "réactivé" if utilisateur.is_active else "désactivé"
+    messages.success(request, f"Compte de {utilisateur.username} {etat}.")
     return redirect('admin_dashboard')
 
 
 @user_passes_test(is_admin, login_url='connexion')
 def admin_logs(request):
-    logs = LogAcces.objects.select_related('utilisateur', 'fichier').all()
-    return render(request, 'partage/admin_logs.html', {'logs': logs})
+    """Journal complet, avec recherche par nom de fichier, empreinte, utilisateur ou adresse IP."""
+    from django.db.models import Q
+    logs = LogAcces.objects.select_related('utilisateur', 'fichier')
+    q = request.GET.get('q', '').strip()
+    if q:
+        logs = logs.filter(
+            Q(nom_fichier__icontains=q) | Q(empreinte_fichier__istartswith=q.lower()) |
+            Q(utilisateur__username__icontains=q) | Q(adresse_ip__icontains=q) |
+            Q(detail__icontains=q)
+        )
+    return render(request, 'partage/admin_logs.html', {'logs': logs[:1000], 'nb_logs': logs.count(), 'q': q})
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -765,101 +828,11 @@ def admin_performance(request):
         'heures_data': heures_data,
         'heure_pointe': heure_pointe,
         'heure_pointe_valeur': max(heures_data) if any(heures_data) else 0,
-        # Disque
-        'disk_total_gb': disk_total_gb,
-        'disk_used_gb': disk_used_gb,
-        'disk_free_gb': disk_free_gb,
-        'disk_percent': disk_percent,
-        # CPU / RAM
-        'cpu_percent': cpu_percent,
-        'cpu_count': cpu_count,
-        'ram_total_gb': ram_total_gb,
-        'ram_used_gb': ram_used_gb,
-        'ram_percent': ram_percent,
-        'load1': round(load1, 2),
-        'load5': round(load5, 2),
-        'load15': round(load15, 2),
-        # Stockage fichiers
-        'taille_stockage_gb': round(taille_stockage / (1024**3), 2),
-    }
-    return render(request, 'partage/admin_performance.html', context)
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# STATISTIQUES DE PERFORMANCE (admin)
-# ─────────────────────────────────────────────────────────────────────────────
-
-@user_passes_test(is_admin, login_url='connexion')
-def admin_performance(request):
-    """Page de statistiques de performance du serveur."""
-    import shutil
-    import psutil
-    from django.db.models import Avg, Count
-    from django.db.models.functions import ExtractHour
-
-    # ── 1. Temps moyen d'upload ─────────────────────────────────────────
-    stats_upload = Fichier.objects.filter(duree_upload__gt=0).aggregate(
-        avg=Avg('duree_upload'),
-        count=Count('id'),
-    )
-    temps_moyen = stats_upload['avg'] or 0
-    nb_fichiers_chronometres = stats_upload['count'] or 0
-
-    # ── 2. Heures de pointe (uploads par heure) ─────────────────────────
-    heures_activite = (
-        LogAcces.objects
-        .filter(action='upload')
-        .annotate(heure=ExtractHour('date_evenement'))
-        .values('heure')
-        .annotate(total=Count('id'))
-        .order_by('heure')
-    )
-    heures_labels = [f"{h:02d}h" for h in range(24)]
-    heures_data = [0] * 24
-    for h in heures_activite:
-        if h['heure'] is not None:
-            heures_data[h['heure']] = h['total']
-    heure_pointe = heures_data.index(max(heures_data)) if any(heures_data) else None
-
-    # ── 3. Espace disque ────────────────────────────────────────────────
-    try:
-        usage = shutil.disk_usage('/app/media')
-        disk_total_gb = round(usage.total / (1024**3), 2)
-        disk_used_gb = round(usage.used / (1024**3), 2)
-        disk_free_gb = round(usage.free / (1024**3), 2)
-        disk_percent = round((usage.used / usage.total) * 100, 1)
-    except Exception as e:
-        logger.error(f"Erreur disk_usage : {e}")
-        disk_total_gb = disk_used_gb = disk_free_gb = disk_percent = 0
-
-    # ── 4. CPU / RAM / Disque (via psutil) ──────────────────────────────
-    try:
-        cpu_percent = psutil.cpu_percent(interval=0.5)
-        cpu_count = psutil.cpu_count()
-        ram = psutil.virtual_memory()
-        ram_total_gb = round(ram.total / (1024**3), 2)
-        ram_used_gb = round(ram.used / (1024**3), 2)
-        ram_percent = ram.percent
-        # Charge système
-        load1, load5, load15 = os.getloadavg() if hasattr(os, 'getloadavg') else (0, 0, 0)
-    except Exception as e:
-        logger.error(f"Erreur psutil : {e}")
-        cpu_percent = cpu_count = 0
-        ram_total_gb = ram_used_gb = ram_percent = 0
-        load1 = load5 = load15 = 0
-
-    # ── 5. Taille totale des fichiers stockés ───────────────────────────
-    taille_stockage = Fichier.objects.aggregate(total=Sum('taille'))['total'] or 0
-
-    context = {
-        # Temps d'upload
-        'temps_moyen': temps_moyen,
-        'nb_fichiers_chronometres': nb_fichiers_chronometres,
-        # Heures de pointe
-        'heures_labels': heures_labels,
-        'heures_data': heures_data,
-        'heure_pointe': heure_pointe,
-        'heure_pointe_valeur': max(heures_data) if any(heures_data) else 0,
+        'heures': [
+            {'label': lbl, 'valeur': v,
+             'pourcent': round(100 * v / max(heures_data)) if any(heures_data) else 0}
+            for lbl, v in zip(heures_labels, heures_data)
+        ],
         # Disque
         'disk_total_gb': disk_total_gb,
         'disk_used_gb': disk_used_gb,
@@ -932,49 +905,93 @@ def admin_user_detail(request, user_id):
 
 @user_passes_test(is_admin, login_url='connexion')
 def admin_corbeille(request):
-    """Vue admin : tous les fichiers en corbeille, tous utilisateurs confondus."""
-    fichiers = Fichier.objects.filter(supprime=True).select_related('proprietaire').order_by('-date_suppression')
-    total_taille = sum(f.taille for f in fichiers)
+    """Vue admin : fichiers dans les corbeilles et fichiers conservés après suppression."""
+    purger_fichiers_expires()
+    fichiers = (Fichier.objects.filter(supprime=True)
+                .select_related('proprietaire__profil').order_by('-date_suppression'))
     context = {
         'fichiers': fichiers,
-        'total_taille': total_taille,
+        'total_taille': sum(f.taille for f in fichiers),
         'nb_total': fichiers.count(),
+        'duree_conservation': ConfigurationCloud.get_config().duree_conservation_jours,
     }
     return render(request, 'partage/admin_corbeille.html', context)
 
 
 @user_passes_test(is_admin, login_url='connexion')
 def admin_supprimer_definitivement(request, fichier_id):
-    """Suppression définitive par l'admin."""
+    """Effacement immédiat par l'administrateur (impossible si le compte est sous conservation)."""
     fichier_obj = get_object_or_404(Fichier, id=fichier_id, supprime=True)
     if request.method == 'POST':
         nom = fichier_obj.nom_original
-        proprietaire = fichier_obj.proprietaire
-        taille = fichier_obj.taille
-        fichier_obj.fichier.delete(save=False)
-        fichier_obj.delete()
-        profil = proprietaire.profil
-        profil.espace_utilise = max(0, profil.espace_utilise - taille)
-        profil.save()
-        journaliser(request, 'suppression', detail=f'Admin : supprimé définitivement {nom}')
-        messages.success(request, f"💥 « {nom} » supprimé définitivement.")
+        if fichier_obj.proprietaire.profil.sous_conservation:
+            messages.error(request, f"Le compte {fichier_obj.proprietaire.username} est sous conservation : "
+                                    f"ses fichiers ne peuvent pas être effacés.")
+            return redirect('admin_corbeille')
+        effacer_du_disque(fichier_obj, f"Effacé par l'administrateur {request.user.username}",
+                          utilisateur=request.user, adresse_ip=get_ip(request))
+        messages.success(request, f"« {nom} » a été effacé définitivement.")
     return redirect('admin_corbeille')
 
 
 @user_passes_test(is_admin, login_url='connexion')
 def admin_restaurer_fichier(request, fichier_id):
-    """Restauration par l'admin."""
+    """Rend le fichier à son propriétaire (y compris un fichier en conservation)."""
     fichier_obj = get_object_or_404(Fichier, id=fichier_id, supprime=True)
     if request.method == 'POST':
         nom = fichier_obj.nom_original
         proprietaire = fichier_obj.proprietaire
+        if fichier_obj.efface_par_utilisateur is not None:
+            profil = proprietaire.profil
+            profil.espace_utilise += fichier_obj.taille
+            profil.save(update_fields=['espace_utilise'])
         fichier_obj.supprime = False
         fichier_obj.date_suppression = None
+        fichier_obj.efface_par_utilisateur = None
+        fichier_obj.conserve_jusqua = None
         fichier_obj.save()
         journaliser(request, 'restauration', fichier=fichier_obj,
-                   detail=f'Admin : restauré {nom} (propriétaire: {proprietaire.username})')
-        messages.success(request, f"♻️ « {nom} » restauré.")
+                    detail=f'Rendu à {proprietaire.username} par un administrateur')
+        messages.success(request, f"« {nom} » a été rendu à {proprietaire.username}.")
     return redirect('admin_corbeille')
+
+
+@user_passes_test(is_admin, login_url='connexion')
+def admin_consulter_fichier(request, fichier_id):
+    """Téléchargement d'un fichier supprimé par un administrateur, avec motif obligatoire.
+
+    Réservé aux fichiers de la Corbeille générale (supprimés ou conservés).
+    Chaque consultation est inscrite au journal avec son motif.
+    """
+    fichier_obj = get_object_or_404(Fichier, id=fichier_id, supprime=True)
+    erreur = ''
+    if request.method == 'POST':
+        motif = ' '.join(request.POST.get('motif', '').split())
+        if len(motif) < 15:
+            erreur = "Indiquez un motif précis (15 caractères minimum)."
+        else:
+            if not _fichier_intact(request, fichier_obj):
+                raise Http404("Fichier indisponible.")
+            journaliser(request, 'consultation_admin', fichier=fichier_obj,
+                        detail=f"Motif : {motif}")
+            return _servir_fichier(fichier_obj, deja_verifie=True)
+    return render(request, 'partage/admin_consulter_fichier.html', {
+        'fichier': fichier_obj, 'erreur': erreur, 'motif': request.POST.get('motif', ''),
+    })
+
+
+@user_passes_test(is_admin, login_url='connexion')
+def admin_basculer_conservation(request, user_id):
+    """Place un compte sous conservation (enquête) ou lève la conservation."""
+    utilisateur = get_object_or_404(User, id=user_id)
+    if request.method == 'POST':
+        profil = utilisateur.profil
+        profil.sous_conservation = not profil.sous_conservation
+        profil.save(update_fields=['sous_conservation'])
+        etat = "placé sous conservation" if profil.sous_conservation else "n'est plus sous conservation"
+        journaliser(request, 'conservation', detail=f"Compte {utilisateur.username} {etat}")
+        messages.success(request, f"Le compte {utilisateur.username} {etat}.")
+    return redirect('admin_user_detail', user_id=user_id)
 
 
 
@@ -999,16 +1016,21 @@ def admin_config_extensions(request):
         ]
 
         if not extensions:
-            messages.error(request, "❌ La liste des extensions ne peut pas être vide.")
+            messages.error(request, "La liste des extensions ne peut pas être vide.")
         else:
             config.extensions_autorisees = ','.join(sorted(set(extensions)))
             try:
                 config.taille_max_mb = max(1, int(taille_max))
             except ValueError:
                 config.taille_max_mb = 100
+            try:
+                config.duree_conservation_jours = max(1, int(request.POST.get('duree_conservation_jours', 90)))
+            except ValueError:
+                config.duree_conservation_jours = 90
             config.save()
-            journaliser(request, 'config', detail=f'Extensions mises à jour ({len(extensions)} autorisées)')
-            messages.success(request, f"✅ Configuration mise à jour : {len(extensions)} extensions autorisées.")
+            journaliser(request, 'config', detail=f'Règles de dépôt : {len(extensions)} extensions, '
+                                                  f'{config.taille_max_mb} Mo max, conservation {config.duree_conservation_jours} j')
+            messages.success(request, f"Règles de dépôt enregistrées : {len(extensions)} extensions autorisées.")
             return redirect('admin_config_extensions')
 
     context = {
@@ -1047,7 +1069,8 @@ def export_logs_csv(request):
             Q(utilisateur__email__icontains=q) |
             Q(adresse_ip__icontains=q) |
             Q(detail__icontains=q) |
-            Q(fichier__nom_original__icontains=q)
+            Q(nom_fichier__icontains=q) |
+            Q(empreinte_fichier__istartswith=q)
         )
     if action_f:
         logs = logs.filter(action=action_f)
@@ -1084,6 +1107,8 @@ def export_logs_csv(request):
         'Email',
         'Action',
         'Fichier',
+        'Taille (octets)',
+        'Empreinte SHA-256',
         'Adresse IP',
         'Détail',
         'ID Log',
@@ -1099,7 +1124,9 @@ def export_logs_csv(request):
             log.utilisateur.username if log.utilisateur else 'Anonyme',
             log.utilisateur.email if log.utilisateur else '',
             actions_labels.get(log.action, log.action),
-            log.fichier.nom_original if log.fichier else '',
+            log.nom_affiche,
+            log.taille_fichier if log.taille_fichier is not None else '',
+            log.empreinte_fichier,
             log.adresse_ip or '',
             (log.detail or '').replace('\n', ' ').replace(';', ','),
             log.id,
@@ -1117,6 +1144,5 @@ def export_logs_csv(request):
 
 def ratelimited_view(request, exception=None):
     """Vue appelée quand la limite est dépassée."""
-    journaliser(request, 'acces_refuse',
-                detail=f'Rate limit atteint sur {request.path}')
+    journaliser(request, 'limite_depassee', detail=f'Limite atteinte sur {request.path}')
     return render(request, 'partage/ratelimited.html', status=429)

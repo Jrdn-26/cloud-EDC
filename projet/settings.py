@@ -5,18 +5,19 @@ from dotenv import load_dotenv
 load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-SECRET_KEY = os.getenv('SECRET_KEY', 'change-moi-en-production-vraiment')
-DEBUG = True
-ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '*').split(',')
-CSRF_TRUSTED_ORIGINS = [
-    'https://edccloud.duckdns.org',
-    'https://*.trycloudflare.com',
-    'https://*.duckdns.org',
-    'http://192.168.1.125',
-    'https://192.168.1.125',
-    'http://localhost',
-    'https://localhost',
-]
+def _liste_env(nom, defaut=''):
+    """Lit une variable d'environnement contenant une liste séparée par des virgules."""
+    return [v.strip() for v in os.getenv(nom, defaut).split(',') if v.strip()]
+
+
+# Secrets et mode : uniquement depuis le .env (aucune valeur par défaut connue)
+SECRET_KEY = os.environ['SECRET_KEY']
+DEBUG = os.getenv('DEBUG', 'False').strip().lower() == 'true'
+ALLOWED_HOSTS = _liste_env('ALLOWED_HOSTS', 'localhost,127.0.0.1')
+# « django » : nom du conteneur sur le réseau Docker, utilisé par Prometheus pour lire /metrics.
+if 'django' not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append('django')
+CSRF_TRUSTED_ORIGINS = _liste_env('CSRF_TRUSTED_ORIGINS', 'https://localhost')
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -38,6 +39,9 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    # Sans ce middleware, un dépassement donne une erreur 403 générique :
+    # la page « Trop de tentatives » (429) et sa ligne de journal ne sont jamais produites.
+    'django_ratelimit.middleware.RatelimitMiddleware',
 ]
 
 ROOT_URLCONF = 'projet.urls'
@@ -97,23 +101,41 @@ EMAIL_HOST_PASSWORD = os.getenv('EMAIL_PASSWORD', '')
 DEFAULT_FROM_EMAIL = f"Cloud EDC <{EMAIL_HOST_USER}>"
 
 
+# ─────────────────────────────────────────
+# SESSIONS, COOKIES ET EN-TÊTES DE SÉCURITÉ
+# ─────────────────────────────────────────
 SESSION_COOKIE_AGE = 3600
-# Configuration CSRF / sessions pour environnements derrière proxy (Cloudflare Tunnel)
-CSRF_COOKIE_SECURE = True
+SESSION_EXPIRE_AT_BROWSER_CLOSE = True
+SESSION_SAVE_EVERY_REQUEST = True
 SESSION_COOKIE_SECURE = True
-CSRF_COOKIE_SAMESITE = 'Lax'
+SESSION_COOKIE_HTTPONLY = True          # le cookie de session n'est pas lisible par JavaScript
 SESSION_COOKIE_SAMESITE = 'Lax'
-CSRF_COOKIE_HTTPONLY = False
-USE_X_FORWARDED_HOST = True
-SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
-DATA_UPLOAD_MAX_MEMORY_SIZE = None
-FILE_UPLOAD_MAX_MEMORY_SIZE = None
+CSRF_COOKIE_SECURE = True
+CSRF_COOKIE_SAMESITE = 'Lax'
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')   # écrit par Nginx
+SECURE_CONTENT_TYPE_NOSNIFF = True
+X_FRAME_OPTIONS = 'DENY'
 
-FILE_ENCRYPTION_KEY = os.getenv('FILE_ENCRYPTION_KEY', SECRET_KEY)
+# Inscription réservée à certains domaines (ex. : ALLOWED_EMAIL_DOMAINS=edc.cm).
+# Vide = tous les domaines acceptés.
+ALLOWED_EMAIL_DOMAINS = [d.lower().lstrip('@') for d in _liste_env('ALLOWED_EMAIL_DOMAINS')]
 
-CLAMAV_USE_TCP = True
+# ─────────────────────────────────────────
+# CHIFFREMENT DES FICHIERS
+# ─────────────────────────────────────────
+# Clé actuelle : 32 octets aléatoires en base64 (openssl rand -base64 32).
+FILE_ENCRYPTION_KEY_V2 = os.getenv('FILE_ENCRYPTION_KEY_V2', '')
+# Ancienne clé : conservée uniquement pour relire les fichiers pas encore rechiffrés.
+FILE_ENCRYPTION_KEY = os.getenv('FILE_ENCRYPTION_KEY', '')
+
+# ─────────────────────────────────────────
+# ANTIVIRUS
+# ─────────────────────────────────────────
 CLAMAV_TCP_HOST = os.getenv('CLAMAV_HOST', 'clamav')
 CLAMAV_TCP_PORT = 3310
+# Jeton partagé avec Prometheus pour lire /metrics (vide = page désactivée).
+METRICS_TOKEN = os.getenv('METRICS_TOKEN', '')
+CLAMAV_TIMEOUT = 600  # analyse d'un fichier volumineux (jusqu'à 1 Go)
 
 LOGIN_URL = '/connexion/'
 LOGIN_REDIRECT_URL = '/mes-fichiers/'
@@ -136,26 +158,22 @@ LOGGING = {
     'loggers': {
         'django': {
             'handlers': ['console'],
-            'level': 'DEBUG',
-            'propagate': False,
-        },
-        'django.request': {
-            'handlers': ['console'],
-            'level': 'DEBUG',
+            'level': 'INFO',
             'propagate': False,
         },
     },
 }
 
 
-
 # ─────────────────────────────────────────
-# CACHE (pour le rate limiting)
+# CACHE (pour la limitation de tentatives) — Redis
+# django-ratelimit exige un cache partagé entre les workers Gunicorn et capable
+# d'incrémenter ses compteurs de façon atomique : c'est le rôle de Redis.
 # ─────────────────────────────────────────
 CACHES = {
     'default': {
         'BACKEND': 'django_redis.cache.RedisCache',
-        'LOCATION': 'redis://redis:6379/1',
+        'LOCATION': os.getenv('REDIS_URL', 'redis://redis:6379/1'),
         'OPTIONS': {
             'CLIENT_CLASS': 'django_redis.client.DefaultClient',
         },
@@ -164,19 +182,19 @@ CACHES = {
 }
 
 # ─────────────────────────────────────────
-# RATE LIMITING
+# LIMITATION DE TENTATIVES
 # ─────────────────────────────────────────
 RATELIMIT_VIEW = 'partage.views.ratelimited_view'
 RATELIMIT_USE_CACHE = 'default'
 RATELIMIT_FAIL_OPEN = False
+# Adresse réelle du client, écrite par Nginx (sinon tous les clients auraient l'IP de Nginx).
+RATELIMIT_IP_META_KEY = 'HTTP_X_REAL_IP'
 
-
-# Augmenter les limites d'upload pour les fichiers volumineux (ex: 500 Mo)
-DATA_UPLOAD_MAX_MEMORY_SIZE = 524288000  # 500 * 1024 * 1024
-FILE_UPLOAD_MAX_MEMORY_SIZE = 524288000  # 500 * 1024 * 1024
-
-
-# ===== Paramètres de session supplémentaires =====
-SESSION_EXPIRE_AT_BROWSER_CLOSE = True
-SESSION_SAVE_EVERY_REQUEST = True
-SESSION_COOKIE_HTTPONLY = False
+# ─────────────────────────────────────────
+# TAILLE DES ENVOIS
+# ─────────────────────────────────────────
+# Au-delà de 10 Mo, Django écrit le fichier reçu sur disque temporaire au lieu
+# de le garder en mémoire. La taille maximale d'un fichier se règle dans
+# l'administration du cloud (ConfigurationCloud.taille_max_mb).
+DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024
+FILE_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024

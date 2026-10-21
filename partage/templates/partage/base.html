@@ -1,275 +1,85 @@
-{% load static %}
-<!DOCTYPE html>
+{% load static interface %}<!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block titre %}Cloud EDC{% endblock %}</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <style>
-        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-        :root {
-            --edc-blue:       #1B2F6E;
-            --edc-blue-dark:  #142258;
-            --edc-blue-mid:   #2442A0;
-            --edc-blue-light: #3558C4;
-            --edc-green:      #00A86B;
-            --edc-green-dark: #007A4D;
-            --edc-green-light:#00D688;
-            --edc-orange:     #E07B20;
-            --edc-orange-dark:#C06010;
-            --white:          #FFFFFF;
-            --light:          #F0F4F8;
-            --light2:         #E2EAF4;
-            --text-dark:      #1A2B3C;
-            --text-mid:       #3D5470;
-            --text-muted:     #6B82A0;
-            --border:         #C8D8EC;
-            --border-light:   #DDE8F5;
-            --shadow-sm:      0 2px 8px rgba(0,61,122,0.10);
-            --shadow-md:      0 4px 20px rgba(0,61,122,0.15);
-            --shadow-lg:      0 8px 40px rgba(0,61,122,0.18);
-            --radius:         12px;
-            --radius-sm:      8px;
-            --radius-lg:      18px;
-        }
-        html { scroll-behavior: smooth; }
-        body { font-family: 'Inter', sans-serif; background: var(--light); color: var(--text-dark); min-height: 100vh; }
-        ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-track { background: var(--light2); }
-        ::-webkit-scrollbar-thumb { background: var(--edc-blue-mid); border-radius: 3px; }
-
-        .navbar {
-            background: var(--edc-blue); padding: 0 2rem; height: 70px;
-            display: flex; align-items: center; justify-content: space-between;
-            position: sticky; top: 0; z-index: 100; box-shadow: 0 3px 12px rgba(0,0,0,0.25);
-        }
-        .navbar-brand { display: flex; align-items: center; gap: 12px; text-decoration: none; }
-        .navbar-logo { width: 44px; height: 44px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
-        .navbar-logo svg { width: 44px; height: 44px; filter: drop-shadow(0 2px 6px rgba(0,0,0,0.3)); }
-        .navbar-brand-text { line-height: 1.2; }
-        .navbar-brand-name { color: white; font-size: 1.05rem; font-weight: 700; display: block; }
-        .navbar-brand-sub { color: var(--edc-orange); font-size: 0.65rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.1em; display: block; }
-        .navbar-nav { display: flex; align-items: center; gap: 2px; list-style: none; }
-        .navbar-nav a { color: rgba(255,255,255,0.80); text-decoration: none; padding: 7px 14px; border-radius: var(--radius-sm); font-size: 0.875rem; font-weight: 500; transition: all 0.2s; display: flex; align-items: center; gap: 5px; }
-        .navbar-nav a:hover { color: white; background: rgba(255,255,255,0.12); }
-        .navbar-nav .nav-admin a { color: var(--edc-orange); border: 1px solid rgba(245,166,35,0.35); }
-        .navbar-right { display: flex; align-items: center; gap: 10px; }
-        .user-chip { display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.10); border: 1px solid rgba(255,255,255,0.15); border-radius: 30px; padding: 5px 14px 5px 5px; }
-        .user-avatar { width: 30px; height: 30px; border-radius: 50%; background: var(--edc-green); display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 700; color: white; text-transform: uppercase; flex-shrink: 0; }
-        .user-name { color: white; font-size: 0.82rem; font-weight: 600; }
-        .badge-staff { background: var(--edc-orange); color: var(--edc-blue-dark); font-size: 0.62rem; font-weight: 800; padding: 2px 8px; border-radius: 20px; text-transform: uppercase; letter-spacing: 0.06em; }
-
-        .accent-bar { height: 4px; background: linear-gradient(90deg, var(--edc-green) 0%, var(--edc-orange) 100%); }
-
-        .messages-container { position: fixed; top: 84px; right: 20px; z-index: 9999; display: flex; flex-direction: column; gap: 10px; max-width: 430px; width: 100%; }
-        .alert { display: flex; align-items: flex-start; gap: 12px; padding: 14px 18px; border-radius: var(--radius); box-shadow: var(--shadow-lg); animation: slideIn 0.4s cubic-bezier(0.34,1.56,0.64,1); cursor: pointer; position: relative; overflow: hidden; border-left: 4px solid; background: #fff; }
-        .alert-success { border-left-color: var(--edc-green); }
-        .alert-error   { border-left-color: #D0021B; }
-        .alert-warning { border-left-color: var(--edc-orange); }
-        .alert-info    { border-left-color: var(--edc-blue-mid); }
-        .alert-icon { font-size: 1.25rem; flex-shrink: 0; margin-top: 1px; }
-        .alert-body { flex: 1; }
-        .alert-title { font-weight: 700; font-size: 0.85rem; color: var(--text-dark); margin-bottom: 2px; }
-        .alert-text { font-size: 0.82rem; color: var(--text-mid); line-height: 1.45; }
-        .alert-close { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 1rem; padding: 0; flex-shrink: 0; }
-        .alert-progress { position: absolute; bottom: 0; left: 0; height: 3px; animation: progressBar 5s linear forwards; }
-        .alert-success .alert-progress { background: var(--edc-green); }
-        .alert-error   .alert-progress { background: #D0021B; }
-        .alert-warning .alert-progress { background: var(--edc-orange); }
-        .alert-info    .alert-progress { background: var(--edc-blue-mid); }
-
-        @keyframes slideIn { from { transform: translateX(120%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
-        @keyframes slideOut { from { transform: translateX(0); opacity: 1; } to { transform: translateX(120%); opacity: 0; } }
-        @keyframes progressBar { from { width: 100%; } to { width: 0%; } }
-        @keyframes fadeUp { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: translateY(0); } }
-        .animate-in { animation: fadeUp 0.45s ease forwards; }
-
-        .main-wrapper { max-width: 1200px; margin: 0 auto; padding: 2rem 1.5rem; }
-
-        .card { background: white; border: 1px solid var(--border-light); border-radius: var(--radius); padding: 1.5rem; box-shadow: var(--shadow-sm); }
-        .card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 2px solid var(--light); }
-        .card-title { font-size: 1rem; font-weight: 700; color: var(--edc-blue); display: flex; align-items: center; gap: 8px; }
-
-        .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 18px; border-radius: var(--radius-sm); font-size: 0.875rem; font-weight: 600; text-decoration: none; border: none; cursor: pointer; transition: all 0.2s; font-family: inherit; line-height: 1; }
-        .btn-primary { background: var(--edc-blue); color: white; box-shadow: 0 3px 10px rgba(0,61,122,0.30); }
-        .btn-primary:hover { background: var(--edc-blue-mid); transform: translateY(-1px); box-shadow: 0 5px 16px rgba(0,61,122,0.35); }
-        .btn-green { background: var(--edc-green); color: white; box-shadow: 0 3px 10px rgba(0,168,107,0.30); }
-        .btn-green:hover { background: var(--edc-green-dark); transform: translateY(-1px); }
-        .btn-orange { background: var(--edc-orange); color: var(--edc-blue-dark); font-weight: 700; box-shadow: 0 3px 10px rgba(245,166,35,0.30); }
-        .btn-orange:hover { background: var(--edc-orange-dark); transform: translateY(-1px); }
-        .btn-secondary { background: var(--light); color: var(--text-mid); border: 1px solid var(--border); }
-        .btn-secondary:hover { background: var(--light2); color: var(--edc-blue); }
-        .btn-danger { background: #FFF0F0; color: #C0021A; border: 1px solid #F5C6CB; }
-        .btn-danger:hover { background: #FFE0E0; }
-        .btn-sm { padding: 5px 12px; font-size: 0.8rem; }
-        .btn-lg { padding: 13px 30px; font-size: 1rem; }
-        .btn-block { width: 100%; justify-content: center; }
-
-        .form-group { margin-bottom: 1.2rem; }
-        .form-label { display: block; font-size: 0.83rem; font-weight: 600; color: var(--text-mid); margin-bottom: 5px; }
-        .form-control { width: 100%; background: white; border: 1.5px solid var(--border); border-radius: var(--radius-sm); padding: 10px 14px; color: var(--text-dark); font-family: inherit; font-size: 0.9rem; transition: all 0.2s; outline: none; }
-        .form-control:focus { border-color: var(--edc-blue-mid); box-shadow: 0 0 0 3px rgba(0,91,170,0.12); }
-        .form-control::placeholder { color: var(--text-muted); }
-        select.form-control option { background: white; color: var(--text-dark); }
-        .errorlist { list-style: none; margin-top: 4px; }
-        .errorlist li { font-size: 0.79rem; color: #C0021A; display: flex; align-items: center; gap: 4px; }
-        .errorlist li::before { content: '⚠ '; }
-
-        .table-wrapper { overflow-x: auto; border-radius: var(--radius); }
-        table { width: 100%; border-collapse: collapse; }
-        th { background: var(--light); padding: 10px 14px; text-align: left; font-size: 0.75rem; font-weight: 700; color: var(--edc-blue); text-transform: uppercase; letter-spacing: 0.07em; border-bottom: 2px solid var(--border); white-space: nowrap; }
-        td { padding: 12px 14px; font-size: 0.875rem; border-bottom: 1px solid var(--border-light); vertical-align: middle; }
-        tr:last-child td { border-bottom: none; }
-        tr:hover td { background: #F5F9FF; }
-
-        .badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 20px; font-size: 0.72rem; font-weight: 700; }
-        .badge-success { background: #E6F9F2; color: #007A4D; border: 1px solid #B3EDD8; }
-        .badge-danger  { background: #FFF0F0; color: #C0021A; border: 1px solid #F5C6CB; }
-        .badge-warning { background: #FFF8E6; color: #A0640A; border: 1px solid #FCDFA0; }
-        .badge-info    { background: #E6F0FF; color: var(--edc-blue); border: 1px solid #B8D0F0; }
-        .badge-orange  { background: #FFF3D6; color: #8A5300; border: 1px solid #FCDFA0; }
-
-        .progress { height: 8px; background: var(--light2); border-radius: 4px; overflow: hidden; }
-        .progress-bar { height: 100%; border-radius: 4px; background: linear-gradient(90deg, var(--edc-blue-mid), var(--edc-green)); transition: width 0.6s ease; }
-        .progress-bar.warn { background: linear-gradient(90deg, var(--edc-orange), #E05A00); }
-
-        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px,1fr)); gap: 1rem; margin-bottom: 1.5rem; }
-        .stat-card { background: white; border: 1px solid var(--border-light); border-radius: var(--radius); padding: 1.2rem 1.4rem; display: flex; align-items: center; gap: 14px; box-shadow: var(--shadow-sm); transition: all 0.2s; border-top: 3px solid transparent; }
-        .stat-card:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); }
-        .stat-card.blue  { border-top-color: var(--edc-blue); }
-        .stat-card.green { border-top-color: var(--edc-green); }
-        .stat-card.orange{ border-top-color: var(--edc-orange); }
-        .stat-card.red   { border-top-color: #D0021B; }
-        .stat-icon { width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.4rem; flex-shrink: 0; }
-        .stat-icon.blue   { background: #E6F0FF; }
-        .stat-icon.green  { background: #E6F9F2; }
-        .stat-icon.orange { background: #FFF3D6; }
-        .stat-icon.red    { background: #FFF0F0; }
-        .stat-value { font-size: 1.7rem; font-weight: 800; color: var(--text-dark); line-height: 1; }
-        .stat-label { font-size: 0.78rem; color: var(--text-muted); margin-top: 3px; font-weight: 500; }
-
-        .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.2rem; flex-wrap: wrap; gap: 0.8rem; }
-        .section-title { font-size: 1.15rem; font-weight: 700; color: var(--edc-blue); display: flex; align-items: center; gap: 8px; }
-        .section-title::before { content: ''; display: inline-block; width: 4px; height: 20px; background: var(--edc-green); border-radius: 2px; }
-
-        footer { background: var(--edc-blue-dark); color: rgba(255,255,255,0.45); text-align: center; padding: 1.2rem 2rem; font-size: 0.78rem; margin-top: 3rem; }
-
-        .text-muted { color: var(--text-muted); }
-        .text-blue { color: var(--edc-blue); }
-        .text-green { color: var(--edc-green); }
-        .text-center { text-align: center; }
-        .d-flex { display: flex; }
-        .align-center { align-items: center; }
-        .gap-1 { gap: 0.5rem; } .gap-2 { gap: 1rem; }
-        .justify-between { justify-content: space-between; }
-        .flex-wrap { flex-wrap: wrap; }
-        .mt-1 { margin-top: 0.5rem; } .mt-2 { margin-top: 1rem; } .mt-3 { margin-top: 1.5rem; }
-        .mb-1 { margin-bottom: 0.5rem; } .mb-2 { margin-bottom: 1rem; } .mb-3 { margin-bottom: 1.5rem; }
-        .w-100 { width: 100%; }
-
-        @media (max-width: 768px) {
-            .navbar { padding: 0 1rem; }
-            .navbar-nav { display: none; }
-            .main-wrapper { padding: 1rem; }
-            .stats-grid { grid-template-columns: 1fr 1fr; }
-            .messages-container { right: 10px; left: 10px; max-width: none; }
-        }
-    </style>
+    <link rel="stylesheet" href="{% static 'css/cloud-edc.css' %}">
     {% block extra_css %}{% endblock %}
 </head>
 <body>
-
-    <nav class="navbar">
-        <a class="navbar-brand" href="{% url 'accueil' %}">
-            <div class="navbar-logo">
-                <img src="{% static 'images/edc-logo.jpg' %}" alt="EDC" style="width:44px;height:44px;object-fit:contain;border-radius:6px;">
-            </div>
-            <div class="navbar-brand-text">
-                <span class="navbar-brand-name">Cloud EDC</span>
-                <span class="navbar-brand-sub">Electricity Development Corporation</span>
-            </div>
+<header class="entete">
+    <div class="entete-interieur">
+        <a class="marque" href="{% url 'accueil' %}">
+            <img src="{% static 'images/edc-logo.jpg' %}" alt="">
+            <span>
+                <span class="marque-nom">Cloud EDC</span>
+                <span class="marque-sous">Electricity Development Corporation</span>
+            </span>
         </a>
 
         {% if user.is_authenticated %}
-        <ul class="navbar-nav">
-            <li><a href="{% url 'mes_fichiers' %}">📁 Mes fichiers</a></li>
-            <li><a href="{% url 'upload_fichier' %}">⬆ Uploader</a></li>
-            <li><a href="{% url 'historique' %}">📋 Historique</a></li>
+        {% with page=request.resolver_match.url_name %}
+        <ul class="nav">
+            <li><a href="{% url 'mes_fichiers' %}" {% if page == 'mes_fichiers' %}aria-current="page"{% endif %}>{% icone "folder" %}Mes fichiers</a></li>
+            <li><a href="{% url 'upload_fichier' %}" {% if page == 'upload_fichier' %}aria-current="page"{% endif %}>{% icone "upload" %}Déposer</a></li>
+            <li><a href="{% url 'historique' %}" {% if page == 'historique' %}aria-current="page"{% endif %}>{% icone "history" %}Historique</a></li>
             {% if user.is_staff or user.is_superuser %}
-            <li class="nav-admin"><a href="{% url 'admin_dashboard' %}">🛡 Administration</a></li>
+            <li><a href="{% url 'admin_dashboard' %}" {% if page|slice:":6" == 'admin_' %}aria-current="page"{% endif %}>{% icone "shield" %}Administration</a></li>
             {% endif %}
         </ul>
-        <div class="navbar-right">
-            {% if user.is_staff or user.is_superuser %}
-            <span class="badge-staff">Admin</span>
-            {% endif %}
-            <div class="user-chip">
-                <div class="user-avatar">{{ user.username|slice:":2" }}</div>
-                <span class="user-name">{{ user.username }}</span>
-            </div>
-            <form method="post" action="{% url 'deconnexion' %}" style="display:inline;">
+        {% endwith %}
+        <div class="compte">
+            <span>
+                <span class="compte-nom">{{ user.get_full_name|default:user.username }}</span>
+                {% if user.is_superuser %}<span class="compte-role">· administrateur</span>{% endif %}
+            </span>
+            <form method="post" action="{% url 'deconnexion' %}">
                 {% csrf_token %}
-                <button type="submit" class="btn btn-secondary btn-sm">Déconnexion</button>
+                <button type="submit" class="lien-deconnexion">{% icone "log-out" "ic-sm" %}Déconnexion</button>
             </form>
         </div>
-        {% else %}
-        <ul class="navbar-nav">
-            <li><a href="{% url 'connexion' %}">Connexion</a></li>
-            <li><a href="{% url 'inscription' %}">Inscription</a></li>
-        </ul>
         {% endif %}
-    </nav>
-    <div class="accent-bar"></div>
+    </div>
+</header>
 
+<main class="contenu">
     {% if messages %}
-    <div class="messages-container" id="msgs">
+    <div class="messages" role="status">
         {% for message in messages %}
-        <div class="alert alert-{{ message.tags }}" onclick="dismissAlert(this)">
-            <div class="alert-icon">
-                {% if message.tags == 'success' %}✅
-                {% elif message.tags == 'error' %}❌
-                {% elif message.tags == 'warning' %}⚠️
-                {% else %}ℹ️{% endif %}
-            </div>
-            <div class="alert-body">
-                <div class="alert-title">
-                    {% if message.tags == 'success' %}Succès !
-                    {% elif message.tags == 'error' %}Erreur
-                    {% elif message.tags == 'warning' %}Attention
-                    {% else %}Information{% endif %}
-                </div>
-                <div class="alert-text">{{ message }}</div>
-            </div>
-            <button class="alert-close" onclick="event.stopPropagation();dismissAlert(this.closest('.alert'))">✕</button>
-            <div class="alert-progress"></div>
+        <div class="message message-{{ message.tags }}">
+            {% if message.tags == 'success' %}{% icone "circle-check" %}
+            {% elif message.tags == 'error' %}{% icone "circle-alert" %}
+            {% elif message.tags == 'warning' %}{% icone "triangle-alert" %}
+            {% else %}{% icone "info" %}{% endif %}
+            <span>{{ message }}</span>
         </div>
         {% endfor %}
     </div>
-    <script>
-        function dismissAlert(el) {
-            el.style.animation = 'slideOut 0.3s ease forwards';
-            setTimeout(() => el.remove(), 300);
-        }
-        setTimeout(() => { document.querySelectorAll('.alert').forEach(dismissAlert); }, 5000);
-    </script>
     {% endif %}
 
-    <div class="main-wrapper">
-        {% block contenu %}{% endblock %}
-    </div>
+    {% block contenu %}{% endblock %}
+</main>
 
-    <footer>
-        <div style="display:flex;align-items:center;justify-content:center;gap:14px;flex-wrap:wrap;">
-            <img src="{% static 'images/edc-logo.jpg' %}" alt="EDC" style="width:32px;height:32px;object-fit:contain;border-radius:4px;opacity:0.95;">
-            <span style="color:rgba(255,255,255,0.4);">|</span>
-            <span><strong style="color:rgba(255,255,255,0.75);">Electricity Development Corporation</strong></span>
-            <span style="color:rgba(255,255,255,0.4);">|</span>
-            <span>Cloud Sécurisé · Yaoundé, Cameroun</span>
-        </div>
-    </footer>
+<footer class="pied">
+    Electricity Development Corporation · Cloud EDC · Yaoundé
+</footer>
 
-    {% block extra_js %}{% endblock %}
+<script>
+document.querySelectorAll('.onglets').forEach(function (groupe) {
+    var boutons = groupe.querySelectorAll('.onglet');
+    boutons.forEach(function (bouton) {
+        bouton.addEventListener('click', function () {
+            boutons.forEach(function (b) {
+                b.setAttribute('aria-selected', 'false');
+                document.getElementById('onglet-' + b.dataset.onglet).hidden = true;
+            });
+            bouton.setAttribute('aria-selected', 'true');
+            document.getElementById('onglet-' + bouton.dataset.onglet).hidden = false;
+        });
+    });
+});
+</script>
+{% block extra_js %}{% endblock %}
 </body>
 </html>

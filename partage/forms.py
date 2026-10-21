@@ -1,4 +1,5 @@
 from django import forms
+from django.conf import settings
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.models import User
 
@@ -14,6 +15,12 @@ class InscriptionForm(UserCreationForm):
 
     def clean_email(self):
         email = self.cleaned_data.get('email', '').strip().lower()
+        domaines = getattr(settings, 'ALLOWED_EMAIL_DOMAINS', [])
+        if domaines and email.rsplit('@', 1)[-1] not in domaines:
+            raise forms.ValidationError(
+                "L'inscription est reservee aux adresses : "
+                + ", ".join('@' + d for d in domaines) + "."
+            )
         if User.objects.filter(email__iexact=email).exists():
             raise forms.ValidationError("Cette adresse e-mail est déjà associée à un compte.")
         return email
@@ -46,12 +53,12 @@ class CreerLienForm(forms.Form):
 
 class AllouerQuotaForm(forms.Form):
     QUOTA_CHOICES = [
-        (2,"2 GB (standard)"),(5,"5 GB"),(10,"10 GB"),
-        (20,"20 GB"),(50,"50 GB"),(100,"100 GB"),
+        (2,"2 Go"),(5,"5 Go"),(10,"10 Go"),
+        (20,"20 Go"),(50,"50 Go"),(100,"100 Go"),
     ]
     quota_gb = forms.ChoiceField(label="Nouveau quota", choices=QUOTA_CHOICES)
     quota_personnalise_gb = forms.FloatField(
-        label="Ou saisir un quota personnalisé (GB)",
+        label="Ou saisir un quota personnalisé (Go)",
         required=False, min_value=0.1,
     )
 
@@ -64,22 +71,22 @@ class AllouerQuotaForm(forms.Form):
 
 class VerifierOTPForm(forms.Form):
     code = forms.CharField(
-        max_length=5, min_length=5,
-        label="Code de vérification",
+        max_length=6, min_length=6,
+        label="Code de verification",
         widget=forms.TextInput(attrs={
-            'placeholder': '•  •  •  •  •',
+            'placeholder': '•  •  •  •  •  •',
             'autocomplete': 'one-time-code',
             'inputmode': 'numeric',
-            'pattern': '[0-9]{5}',
+            'pattern': '[0-9]{6}',
             'autofocus': True,
-            'maxlength': '5',
+            'maxlength': '6',
         })
     )
 
     def clean_code(self):
         code = self.cleaned_data.get('code', '').strip()
-        if not code.isdigit() or len(code) != 5:
-            raise forms.ValidationError("Le code doit contenir exactement 5 chiffres.")
+        if not code.isdigit() or len(code) != 6:
+            raise forms.ValidationError("Le code doit contenir exactement 6 chiffres.")
         return code
 
 

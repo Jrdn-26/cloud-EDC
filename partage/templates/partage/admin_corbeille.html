@@ -1,96 +1,70 @@
 {% extends 'partage/base.html' %}
-{% block titre %}Corbeille admin — Cloud EDC{% endblock %}
-{% block extra_css %}
-<style>
-.admin-header {
-    background: linear-gradient(135deg, #142258, #1B2F6E);
-    border-radius: var(--radius-lg); padding: 1.8rem 2rem;
-    margin-bottom: 1.5rem; color: white;
-    display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem;
-}
-.admin-header h1 { font-size: 1.5rem; font-weight: 800; margin-bottom: 0.3rem; }
-.admin-header p { font-size: 0.875rem; color: rgba(255,255,255,0.70); }
-.stats-mini { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px,1fr)); gap: 1rem; margin-bottom: 1.5rem; }
-.stat-mini {
-    background: white; border: 1px solid var(--border-light);
-    border-radius: var(--radius); padding: 1rem 1.2rem;
-    border-left: 4px solid var(--edc-blue);
-}
-.stat-mini.red { border-left-color: #ef4444; }
-.stat-mini-label { font-size: 0.72rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px; }
-.stat-mini-value { font-size: 1.5rem; font-weight: 800; color: var(--text-dark); }
-</style>
-{% endblock %}
-
+{% load interface %}
+{% block titre %}Corbeille générale — Administration Cloud EDC{% endblock %}
 {% block contenu %}
-<div class="admin-header animate-in">
+<a href="{% url 'admin_dashboard' %}" class="retour">{% icone "arrow-left" "ic-sm" %}Administration</a>
+<div class="titre-page">
     <div>
-        <h1>🗑️ Corbeille globale</h1>
-        <p>Tous les fichiers supprimés par les utilisateurs</p>
-    </div>
-    <a href="{% url 'admin_dashboard' %}" class="btn btn-secondary btn-sm"
-       style="background:rgba(255,255,255,0.15);color:white;border-color:rgba(255,255,255,0.25);">← Dashboard</a>
-</div>
-
-<div class="stats-mini animate-in">
-    <div class="stat-mini">
-        <div class="stat-mini-label">📁 Fichiers en corbeille</div>
-        <div class="stat-mini-value">{{ nb_total }}</div>
-    </div>
-    <div class="stat-mini red">
-        <div class="stat-mini-label">💾 Espace occupé</div>
-        <div class="stat-mini-value">{{ total_taille|filesizeformat }}</div>
+        <h1>Corbeille générale</h1>
+        <p>{{ nb_total }} fichier{{ nb_total|pluralize }} supprimé{{ nb_total|pluralize }} · {{ total_taille|filesizeformat }} occupés.
+           Un fichier supprimé définitivement par son propriétaire est conservé {{ duree_conservation }} jours, puis effacé.</p>
     </div>
 </div>
 
+<div class="panneau">
 {% if fichiers %}
-<div class="card" style="padding:0;">
     <div class="table-wrapper">
         <table>
             <thead>
                 <tr>
-                    <th>Fichier</th>
-                    <th>Propriétaire</th>
-                    <th>Taille</th>
-                    <th>Supprimé le</th>
-                    <th>Actions</th>
+                    <th>Nom</th><th>Propriétaire</th><th class="col-num">Taille</th><th>État</th>
+                    <th class="col-actions"><span class="sr-only">Actions</span></th>
                 </tr>
             </thead>
             <tbody>
-                {% for f in fichiers %}
+            {% for f in fichiers %}
                 <tr>
-                    <td style="font-weight:600;font-size:0.85rem;">{{ f.icone }} {{ f.nom_original }}</td>
-                    <td style="font-size:0.85rem;">
-                        <a href="{% url 'admin_user_detail' f.proprietaire.id %}" style="color:var(--edc-blue);">
-                            {{ f.proprietaire.username }}
-                        </a>
-                    </td>
-                    <td style="font-size:0.85rem;">{{ f.taille|filesizeformat }}</td>
-                    <td style="font-size:0.8rem;color:var(--text-muted);">{{ f.date_suppression|date:"d/m/Y H:i" }}</td>
                     <td>
-                        <div style="display:flex;gap:6px;">
-                            <form method="post" action="{% url 'admin_restaurer_fichier' f.id %}" style="display:inline;">
-                                {% csrf_token %}
-                                <button type="submit" class="btn btn-green btn-sm" title="Restaurer">♻️</button>
-                            </form>
-                            <form method="post" action="{% url 'admin_supprimer_definitivement' f.id %}" style="display:inline;"
-                                  onsubmit="return confirm('Supprimer DÉFINITIVEMENT « {{ f.nom_original }} » ?');">
-                                {% csrf_token %}
-                                <button type="submit" class="btn btn-danger btn-sm" title="Supprimer">💥</button>
-                            </form>
-                        </div>
+                        <div class="nom-fichier">{% icone f.nom_original|icone_fichier %}<span>{{ f.nom_original }}</span></div>
+                        {% if f.empreinte_sha256 %}<div class="empreinte discret" title="{{ f.empreinte_sha256 }}">SHA-256 {{ f.empreinte_sha256|slice:":12" }}…</div>{% endif %}
+                    </td>
+                    <td><a href="{% url 'admin_user_detail' f.proprietaire.id %}">{{ f.proprietaire.username }}</a></td>
+                    <td class="col-num">{{ f.taille|filesizeformat }}</td>
+                    <td>
+                        {% if f.efface_par_utilisateur %}
+                            <span class="badge badge-warning">Conservé</span>
+                            <span class="discret">supprimé le {{ f.efface_par_utilisateur|date:"d/m/Y" }},
+                            {% if f.proprietaire.profil.sous_conservation %}effacement suspendu (enquête){% else %}effacé le {{ f.conserve_jusqua|date:"d/m/Y" }}{% endif %}</span>
+                        {% else %}
+                            <span class="badge badge-info">Corbeille</span>
+                            <span class="discret">depuis le {{ f.date_suppression|date:"d/m/Y" }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="col-actions">
+                        <a class="btn btn-secondary btn-sm" href="{% url 'admin_consulter_fichier' f.id %}">{% icone "download" "ic-sm" %}Consulter</a>
+                        <form method="post" action="{% url 'admin_restaurer_fichier' f.id %}" style="display:inline"
+                              onsubmit="return confirm('Rendre « {{ f.nom_original|escapejs }} » à {{ f.proprietaire.username|escapejs }} ?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-secondary btn-sm">{% icone "rotate-ccw" "ic-sm" %}Rendre</button>
+                        </form>
+                        {% if not f.proprietaire.profil.sous_conservation %}
+                        <form method="post" action="{% url 'admin_supprimer_definitivement' f.id %}" style="display:inline"
+                              onsubmit="return confirm('Effacer définitivement « {{ f.nom_original|escapejs }} » ? Le fichier sera irrécupérable ; sa trace restera dans le journal.');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn-icone danger" title="Effacer définitivement" aria-label="Effacer définitivement {{ f.nom_original }}">{% icone "trash-2" %}</button>
+                        </form>
+                        {% endif %}
                     </td>
                 </tr>
-                {% endfor %}
+            {% endfor %}
             </tbody>
         </table>
     </div>
-</div>
 {% else %}
-<div style="text-align:center;padding:5rem 2rem;background:white;border:1px solid var(--border-light);border-radius:var(--radius);">
-    <div style="font-size:4rem;opacity:0.3;margin-bottom:1rem;">🎉</div>
-    <div style="font-size:1.1rem;font-weight:700;color:var(--text-dark);margin-bottom:0.5rem;">Corbeille vide</div>
-    <div style="font-size:0.875rem;color:var(--text-muted);">Aucun fichier supprimé actuellement.</div>
-</div>
+    <div class="vide">
+        <h2>Aucun fichier supprimé</h2>
+        <p>Les fichiers mis à la corbeille ou supprimés par les utilisateurs apparaîtront ici.</p>
+    </div>
 {% endif %}
+</div>
 {% endblock %}

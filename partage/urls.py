@@ -1,6 +1,6 @@
 from django.contrib.auth import views as auth_views
 from django.urls import path
-from . import views
+from . import metriques, views
 
 urlpatterns = [
     path('', views.accueil, name='accueil'),
@@ -34,4 +34,7 @@ urlpatterns = [
     path('admin-cloud/user/<int:user_id>/',            views.admin_user_detail,     name='admin_user_detail'),
     path('admin-cloud/supprimer/<int:fichier_id>/',   views.admin_supprimer_fichier, name='admin_supprimer_fichier'),
     path('admin-cloud/toggle-user/<int:user_id>/',    views.admin_toggle_user,     name='admin_toggle_user'),
+    path('admin-cloud/conservation/<int:user_id>/',   views.admin_basculer_conservation, name='admin_basculer_conservation'),
+    path('admin-cloud/consulter/<int:fichier_id>/',   views.admin_consulter_fichier, name='admin_consulter_fichier'),
+    path('metrics',                                  metriques.metriques,       name='metriques'),
 ]

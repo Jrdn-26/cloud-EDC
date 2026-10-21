@@ -1,0 +1,49 @@
+{% extends 'partage/base.html' %}
+{% load interface %}
+{% block titre %}Consulter un fichier supprimé — Administration Cloud EDC{% endblock %}
+{% block contenu %}
+<div class="formulaire-etroit">
+    <a href="{% url 'admin_corbeille' %}" class="retour">{% icone "arrow-left" "ic-sm" %}Corbeille générale</a>
+    <div class="titre-page">
+        <div>
+            <h1>Consulter un fichier supprimé</h1>
+            <p>Cette consultation sera inscrite au journal avec votre nom, l'heure et le motif saisi.</p>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="fichier-resume">
+            {% icone fichier.nom_original|icone_fichier %}
+            <div>
+                <strong>{{ fichier.nom_original }}</strong>
+                <span class="discret">{{ fichier.taille|filesizeformat }} · déposé par {{ fichier.proprietaire.username }} le {{ fichier.date_upload|date:"d/m/Y" }}</span>
+            </div>
+        </div>
+
+        <dl class="details mb-2">
+            <dt>Empreinte SHA-256</dt>
+            <dd class="empreinte">{{ fichier.empreinte_sha256|default:"non calculée" }}</dd>
+            {% if fichier.efface_par_utilisateur %}
+            <dt>Supprimé par l'utilisateur</dt><dd>le {{ fichier.efface_par_utilisateur|date:"d/m/Y à H:i" }}</dd>
+            <dt>Effacement prévu</dt><dd>{% if fichier.proprietaire.profil.sous_conservation %}suspendu (compte sous conservation){% else %}le {{ fichier.conserve_jusqua|date:"d/m/Y" }}{% endif %}</dd>
+            {% else %}
+            <dt>Dans la corbeille</dt><dd>depuis le {{ fichier.date_suppression|date:"d/m/Y à H:i" }}</dd>
+            {% endif %}
+        </dl>
+
+        <form method="post">
+            {% csrf_token %}
+            {% if erreur %}<div class="message message-error mb-2">{{ erreur }}</div>{% endif %}
+            <div class="form-group">
+                <label class="form-label" for="motif">Motif de la consultation</label>
+                <textarea name="motif" id="motif" class="form-control" rows="3" required minlength="15" maxlength="200">{{ motif }}</textarea>
+                <div class="form-aide">Exemple : « Enquête sur une fuite de document, demande de la Direction générale du 20/10/2026 ».</div>
+            </div>
+            <div class="actions">
+                <button type="submit" class="btn btn-primary">{% icone "download" "ic-sm" %}Télécharger le fichier</button>
+                <a href="{% url 'admin_corbeille' %}" class="btn btn-secondary">Annuler</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

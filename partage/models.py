@@ -1,5 +1,6 @@
+import os
 import uuid
-import random
+import secrets
 from django.db import models
 from django.contrib.auth.models import User
 from django.utils import timezone
@@ -8,15 +9,28 @@ from django.db.models.signals import post_save
 from django.dispatch import receiver
 
 
+LONGUEUR_MAX_CHEMIN = 500
+
+
 def chemin_upload(instance, filename):
-    """Stocke chaque fichier dans 'CLOUD EDC/<username>/' sur le disque externe."""
-    return f"CLOUD EDC/{instance.proprietaire.username}/{uuid.uuid4()}_{filename}.enc"
+    """Stocke chaque fichier dans 'CLOUD EDC/<username>/' sur le disque externe.
+
+    Le nom d'origine est raccourci dans le chemin (il reste entier dans
+    Fichier.nom_original) pour que le chemin tienne toujours dans la colonne.
+    """
+    base, ext = os.path.splitext(filename)
+    nom_court = base[:120] + ext[:20]
+    return f"CLOUD EDC/{instance.proprietaire.username}/{uuid.uuid4()}_{nom_court}.enc"
 
 
 class ProfilUtilisateur(models.Model):
     utilisateur    = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profil')
     quota_octets   = models.BigIntegerField(default=20 * 1024 * 1024 * 1024)
     espace_utilise = models.BigIntegerField(default=0)
+    sous_conservation = models.BooleanField(
+        default=False,
+        help_text="Conservation pour enquête : aucun fichier de ce compte n'est effacé, même après le délai."
+    )
     taille_max_fichier_mb = models.PositiveIntegerField(
         default=100,
         help_text="Taille maximale d'un fichier uploadable par cet utilisateur (en MB)."
@@ -65,17 +79,25 @@ class Fichier(models.Model):
 
     proprietaire   = models.ForeignKey(User, on_delete=models.CASCADE, related_name='fichiers')
     nom_original   = models.CharField(max_length=255)
-    fichier        = models.FileField(upload_to=chemin_upload)
+    fichier        = models.FileField(upload_to=chemin_upload, max_length=LONGUEUR_MAX_CHEMIN)
     taille         = models.PositiveIntegerField(default=0)
     date_upload    = models.DateTimeField(auto_now_add=True)
     statut_scan    = models.CharField(max_length=20, choices=STATUT_CHOICES, default='en_attente')
     resultat_scan  = models.CharField(max_length=255, blank=True, null=True)
     est_chiffre    = models.BooleanField(default=True)
     iv_chiffrement = models.CharField(max_length=64, blank=True, null=True)
+    empreinte_sha256 = models.CharField(
+        max_length=64, blank=True, db_index=True,
+        help_text="Empreinte SHA-256 du contenu d'origine, calculée au dépôt."
+    )
     duree_upload   = models.FloatField(default=0, help_text="Durée d'upload en secondes")
     # Corbeille
     supprime          = models.BooleanField(default=False, help_text="True = dans la corbeille")
     date_suppression  = models.DateTimeField(null=True, blank=True)
+    # Suppression définitive demandée par l'utilisateur : le fichier disparaît de
+    # son compte mais reste conservé (chiffré) jusqu'à « conserve_jusqua ».
+    efface_par_utilisateur = models.DateTimeField(null=True, blank=True)
+    conserve_jusqua        = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ['-date_upload']
@@ -83,16 +105,6 @@ class Fichier(models.Model):
     def __str__(self):
         return f"{self.nom_original} ({self.proprietaire.username})"
 
-    @property
-    def icone(self):
-        ext = self.nom_original.lower().split('.')[-1] if '.' in self.nom_original else ''
-        icons = {
-            'pdf': '📄', 'doc': '📝', 'docx': '📝', 'xls': '📊', 'xlsx': '📊',
-            'ppt': '📊', 'pptx': '📊', 'jpg': '🖼️', 'jpeg': '🖼️', 'png': '🖼️',
-            'gif': '🖼️', 'mp4': '🎬', 'avi': '🎬', 'mp3': '🎵', 'wav': '🎵',
-            'zip': '📦', 'rar': '📦', '7z': '📦', 'txt': '📃', 'csv': '📊',
-        }
-        return icons.get(ext, '📁')
 
 
 class LienPartage(models.Model):
@@ -119,6 +131,8 @@ class LienPartage(models.Model):
             return False
         if self.fichier.statut_scan != 'sain':
             return False
+        if self.fichier.supprime:
+            return False
         return True
 
     def __str__(self):
@@ -127,14 +141,22 @@ class LienPartage(models.Model):
 
 class LogAcces(models.Model):
     ACTION_CHOICES = [
-        ('upload',         'Upload'),
-        ('upload_refuse',  'Upload refusé'),
-        ('creation_lien',  'Création de lien'),
-        ('telechargement', 'Téléchargement'),
-        ('acces_refuse',   'Accès refusé'),
-        ('suppression',    'Suppression'),
-        ('restauration',   'Restauration'),
-        ('config',         'Configuration'),
+        ('upload',             'Dépôt'),
+        ('upload_refuse',      'Dépôt refusé'),
+        ('creation_lien',      'Création de lien'),
+        ('telechargement',     'Téléchargement'),
+        ('fichier_altere',     'Fichier altéré, envoi refusé'),
+        ('acces_refuse',       'Accès refusé'),
+        ('suppression',        'Suppression'),
+        ('restauration',       'Restauration'),
+        ('config',             'Configuration'),
+        ('consultation_admin', 'Consultation par un administrateur'),
+        ('conservation',       'Conservation pour enquête'),
+        ('purge',              'Effacement définitif'),
+        ('connexion',          'Connexion'),
+        ('connexion_echec',    'Échec de connexion'),
+        ('otp_echec',          'Code de vérification refusé'),
+        ('limite_depassee',    'Trop de tentatives'),
     ]
 
     utilisateur    = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
@@ -144,6 +166,15 @@ class LogAcces(models.Model):
     lien           = models.ForeignKey(LienPartage, on_delete=models.SET_NULL, null=True, blank=True)
     detail         = models.CharField(max_length=255, blank=True)
     date_evenement = models.DateTimeField(auto_now_add=True)
+    # Copie des informations du fichier au moment de l'événement : le journal
+    # reste lisible et probant même après l'effacement du fichier.
+    nom_fichier       = models.CharField(max_length=255, blank=True)
+    taille_fichier    = models.BigIntegerField(null=True, blank=True)
+    empreinte_fichier = models.CharField(max_length=64, blank=True, db_index=True)
+
+    @property
+    def nom_affiche(self):
+        return self.nom_fichier or (self.fichier.nom_original if self.fichier else '')
 
     class Meta:
         ordering = ['-date_evenement']
@@ -154,28 +185,66 @@ class LogAcces(models.Model):
 
 
 class CodeOTP(models.Model):
+    """Code a usage unique (6 chiffres) envoye par courriel.
+
+    Securite : genere avec le module `secrets`, valable 10 minutes,
+    invalide apres MAX_TENTATIVES essais incorrects.
+    """
+    MAX_TENTATIVES = 5
+    DUREE_VALIDITE = timedelta(minutes=10)
+
     utilisateur = models.ForeignKey(User, on_delete=models.CASCADE, related_name='codes_otp')
-    code        = models.CharField(max_length=5)
+    code        = models.CharField(max_length=6)
     expire_le   = models.DateTimeField()
     utilise     = models.BooleanField(default=False)
+    tentatives  = models.PositiveSmallIntegerField(default=0)
     cree_le     = models.DateTimeField(auto_now_add=True)
 
     def est_valide(self):
-        return not self.utilise and timezone.now() <= self.expire_le
+        return (
+            not self.utilise
+            and self.tentatives < self.MAX_TENTATIVES
+            and timezone.now() <= self.expire_le
+        )
 
     @classmethod
     def generer(cls, utilisateur):
         cls.objects.filter(utilisateur=utilisateur, utilise=False).delete()
-        code = str(random.randint(10000, 99999))
+        code = f"{secrets.randbelow(10 ** 6):06d}"
         return cls.objects.create(
             utilisateur=utilisateur,
             code=code,
-            expire_le=timezone.now() + timedelta(minutes=10),
+            expire_le=timezone.now() + cls.DUREE_VALIDITE,
         )
 
+    @classmethod
+    def verifier(cls, utilisateur, code_saisi):
+        """Verifie le code saisi pour cet utilisateur.
+
+        Retourne 'ok', 'incorrect', 'expire' ou 'bloque'.
+        Chaque echec est compte ; au-dela de MAX_TENTATIVES le code est inutilisable.
+        """
+        if utilisateur is None:
+            return 'incorrect'
+        otp = (cls.objects.filter(utilisateur=utilisateur, utilise=False)
+               .order_by('-cree_le').first())
+        if otp is None:
+            return 'expire'
+        if otp.tentatives >= cls.MAX_TENTATIVES:
+            return 'bloque'
+        if timezone.now() > otp.expire_le:
+            return 'expire'
+        if not secrets.compare_digest(otp.code, (code_saisi or '').strip()):
+            otp.tentatives += 1
+            otp.save(update_fields=['tentatives'])
+            return 'bloque' if otp.tentatives >= cls.MAX_TENTATIVES else 'incorrect'
+        otp.utilise = True
+        otp.save(update_fields=['utilise'])
+        return 'ok'
+
     def __str__(self):
-        etat = 'utilisé' if self.utilise else 'valide'
-        return f"OTP {self.code} — {self.utilisateur.username} ({etat})"
+        etat = 'utilise' if self.utilise else 'valide'
+        return f"OTP {self.utilisateur.username} ({etat})"
 
 
 
@@ -196,6 +265,10 @@ class ConfigurationCloud(models.Model):
     taille_max_mb = models.PositiveIntegerField(
         default=100,
         help_text="Taille maximale d'un fichier en MB."
+    )
+    duree_conservation_jours = models.PositiveIntegerField(
+        default=90,
+        help_text="Durée de conservation d'un fichier après sa suppression définitive par l'utilisateur."
     )
     maj_le = models.DateTimeField(auto_now=True)
 

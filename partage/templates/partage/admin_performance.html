@@ -1,326 +1,70 @@
 {% extends 'partage/base.html' %}
-{% block titre %}Performance — Admin Cloud EDC{% endblock %}
-{% block extra_css %}
-<style>
-.perf-header {
-    background: linear-gradient(135deg, #142258, #1B2F6E, #2442A0);
-    border-radius: var(--radius-lg); padding: 1.8rem 2rem;
-    margin-bottom: 1.5rem; color: white;
-    display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem;
-}
-.perf-header h1 { font-size: 1.5rem; font-weight: 800; margin-bottom: 0.3rem; }
-.perf-header p  { font-size: 0.875rem; color: rgba(255,255,255,0.70); }
-.live-pill {
-    display: inline-flex; align-items: center; gap: 7px;
-    background: rgba(0, 168, 107, 0.25); border: 1px solid rgba(0,168,107,0.5);
-    color: #00D688; padding: 6px 14px; border-radius: 20px;
-    font-size: 0.82rem; font-weight: 700;
-}
-.live-dot {
-    width: 8px; height: 8px; border-radius: 50%; background: #00D688;
-    animation: pulse-dot 1.4s infinite;
-}
-@keyframes pulse-dot {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(0,168,107,0.5); }
-    50%      { box-shadow: 0 0 0 7px rgba(0,168,107,0); }
-}
-
-.perf-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: 1.1rem; margin-bottom: 1.5rem;
-}
-.perf-card {
-    background: white; border: 1px solid var(--border-light);
-    border-radius: var(--radius); padding: 1.4rem 1.6rem;
-    box-shadow: var(--shadow-sm);
-    border-top: 3px solid var(--edc-blue);
-    transition: all 0.25s;
-    position: relative;
-    overflow: hidden;
-}
-.perf-card:hover { box-shadow: var(--shadow-md); transform: translateY(-3px); }
-.perf-card.cpu  { border-top-color: #3b82f6; }
-.perf-card.ram  { border-top-color: #a855f7; }
-.perf-card.disk { border-top-color: #22c55e; }
-.perf-card.perf { border-top-color: #f59e0b; }
-.perf-card.time { border-top-color: #ef4444; }
-.perf-card.peak { border-top-color: #06b6d4; }
-
-.perf-label {
-    font-size: 0.72rem; font-weight: 700; color: var(--text-muted);
-    text-transform: uppercase; letter-spacing: 0.08em;
-    display: flex; align-items: center; gap: 6px;
-    margin-bottom: 10px;
-}
-.perf-value {
-    font-size: 2.2rem; font-weight: 800;
-    color: var(--text-dark); line-height: 1.1;
-    margin-bottom: 4px;
-}
-.perf-value small { font-size: 1rem; font-weight: 600; color: var(--text-muted); }
-.perf-sub { font-size: 0.78rem; color: var(--text-muted); }
-
-.gauge {
-    height: 8px; background: var(--light2);
-    border-radius: 10px; overflow: hidden; margin-top: 12px;
-}
-.gauge-fill {
-    height: 100%; border-radius: 10px;
-    transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
-}
-.gauge-blue   { background: linear-gradient(90deg, #3b82f6, #60a5fa); }
-.gauge-purple { background: linear-gradient(90deg, #a855f7, #c084fc); }
-.gauge-green  { background: linear-gradient(90deg, #22c55e, #4ade80); }
-.gauge-orange { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
-.gauge-red    { background: linear-gradient(90deg, #ef4444, #f87171); }
-
-/* Graphique heures de pointe */
-.chart-container {
-    background: white; border: 1px solid var(--border-light);
-    border-radius: var(--radius); padding: 1.6rem;
-    box-shadow: var(--shadow-sm); margin-bottom: 1.5rem;
-}
-.chart-title {
-    font-size: 1.05rem; font-weight: 700; color: var(--edc-blue);
-    margin-bottom: 1.2rem;
-    display: flex; align-items: center; gap: 8px;
-}
-.chart-title::before {
-    content: ''; display: inline-block; width: 4px; height: 20px;
-    background: var(--edc-green); border-radius: 2px;
-}
-.bars {
-    display: flex; align-items: flex-end;
-    gap: 4px; height: 180px;
-    padding: 0 4px;
-}
-.bar-wrap {
-    flex: 1; display: flex; flex-direction: column;
-    align-items: center; justify-content: flex-end;
-    height: 100%; position: relative;
-}
-.bar {
-    width: 100%; max-width: 32px;
-    background: linear-gradient(180deg, #3b82f6, #1e40af);
-    border-radius: 4px 4px 0 0;
-    transition: all 0.3s;
-    min-height: 3px;
-    position: relative;
-}
-.bar:hover {
-    background: linear-gradient(180deg, #f59e0b, #d97706);
-    transform: scaleY(1.05);
-}
-.bar.peak {
-    background: linear-gradient(180deg, #22c55e, #15803d);
-    box-shadow: 0 0 12px rgba(34, 197, 94, 0.4);
-}
-.bar-label {
-    font-size: 0.65rem; color: var(--text-muted);
-    margin-top: 6px; transform: rotate(-45deg);
-    white-space: nowrap;
-}
-.bar-value {
-    position: absolute; top: -20px;
-    font-size: 0.7rem; font-weight: 700;
-    color: var(--text-dark); opacity: 0;
-    transition: opacity 0.2s;
-}
-.bar-wrap:hover .bar-value { opacity: 1; }
-
-.peak-info {
-    display: flex; align-items: center; justify-content: center;
-    gap: 24px; margin-top: 20px; padding-top: 16px;
-    border-top: 1px solid var(--border-light);
-    flex-wrap: wrap;
-}
-.peak-stat {
-    text-align: center;
-}
-.peak-stat-num {
-    font-size: 1.6rem; font-weight: 800; color: var(--edc-blue);
-}
-.peak-stat-lbl {
-    font-size: 0.72rem; color: var(--text-muted);
-    text-transform: uppercase; letter-spacing: 0.05em;
-    margin-top: 2px;
-}
-
-@media (max-width: 640px) {
-    .bars { height: 130px; }
-    .bar-label { font-size: 0.55rem; }
-    .perf-value { font-size: 1.8rem; }
-}
-</style>
-{% endblock %}
-
+{% load l10n %}
+{% load interface %}
+{% block titre %}Performances — Administration Cloud EDC{% endblock %}
 {% block contenu %}
-<div class="perf-header animate-in">
+<a href="{% url 'admin_dashboard' %}" class="retour">{% icone "arrow-left" "ic-sm" %}Administration</a>
+<div class="titre-page">
     <div>
-        <h1>⚡ Statistiques de performance</h1>
-        <p>Monitoring en temps réel du serveur Cloud EDC</p>
-    </div>
-    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
-        <div class="live-pill">
-            <span class="live-dot"></span> LIVE
-        </div>
-        <a href="{% url 'admin_dashboard' %}" class="btn btn-secondary btn-sm"
-           style="background:rgba(255,255,255,0.15);color:white;border-color:rgba(255,255,255,0.25);">
-            ← Dashboard
-        </a>
+        <h1>Performances du serveur</h1>
+        <p>Valeurs relevées au chargement de la page, actualisée toutes les 30 secondes. L'historique détaillé est dans Grafana.</p>
     </div>
 </div>
 
-<!-- Cartes principales -->
-<div class="perf-grid animate-in">
-
-    <!-- Temps moyen d'upload -->
-    <div class="perf-card time">
-        <div class="perf-label">⏱️ Temps moyen d'upload</div>
-        {% if temps_moyen > 0 %}
-            <div class="perf-value">
-                {{ temps_moyen|floatformat:2 }} <small>s</small>
-            </div>
-            <div class="perf-sub">Sur {{ nb_fichiers_chronometres }} fichier{{ nb_fichiers_chronometres|pluralize }} uploadé{{ nb_fichiers_chronometres|pluralize }}</div>
-        {% else %}
-            <div class="perf-value" style="color:var(--text-muted);">—</div>
-            <div class="perf-sub">Aucune donnée pour le moment</div>
-        {% endif %}
+<div class="panneau chiffres">
+    <div class="chiffre">
+        <div class="chiffre-valeur{% if cpu_percent > 85 %} alerte{% endif %}">{{ cpu_percent|floatformat:1 }} %</div>
+        <div class="chiffre-libelle">Processeur ({{ cpu_count }} cœur{{ cpu_count|pluralize }})</div>
+        <div class="jauge-ligne"><div class="progress"><div class="progress-bar{% if cpu_percent > 85 %} warn{% endif %}" style="width: {{ cpu_percent|unlocalize }}%"></div></div></div>
     </div>
-
-    <!-- Heures de pointe -->
-    <div class="perf-card peak">
-        <div class="perf-label">🔥 Heure de pointe</div>
-        {% if heure_pointe is not None %}
-            <div class="perf-value">{{ heure_pointe }}h<small>00</small></div>
-            <div class="perf-sub">{{ heure_pointe_valeur }} upload{{ heure_pointe_valeur|pluralize }} à cette heure</div>
-        {% else %}
-            <div class="perf-value" style="color:var(--text-muted);">—</div>
-            <div class="perf-sub">Aucun upload enregistré</div>
-        {% endif %}
+    <div class="chiffre">
+        <div class="chiffre-valeur{% if ram_percent > 85 %} alerte{% endif %}">{{ ram_percent|floatformat:1 }} %</div>
+        <div class="chiffre-libelle">Mémoire ({{ ram_used_gb }} / {{ ram_total_gb }} Go)</div>
+        <div class="jauge-ligne"><div class="progress"><div class="progress-bar{% if ram_percent > 85 %} warn{% endif %}" style="width: {{ ram_percent|unlocalize }}%"></div></div></div>
     </div>
-
-    <!-- Espace disque restant -->
-    <div class="perf-card disk">
-        <div class="perf-label">💾 Espace disque restant</div>
-        <div class="perf-value">
-            {{ disk_free_gb }} <small>GB</small>
-        </div>
-        <div class="perf-sub">sur {{ disk_total_gb }} GB au total</div>
-        <div class="gauge">
-            <div class="gauge-fill {% if disk_percent > 90 %}gauge-red{% elif disk_percent > 75 %}gauge-orange{% else %}gauge-green{% endif %}"
-                 style="width:{{ disk_percent }}%;"></div>
-        </div>
-        <div class="perf-sub" style="margin-top:6px;">{{ disk_percent }}% utilisé</div>
+    <div class="chiffre">
+        <div class="chiffre-valeur{% if disk_percent > 90 %} alerte{% endif %}">{{ disk_free_gb }} Go</div>
+        <div class="chiffre-libelle">Libres sur {{ disk_total_gb }} Go ({{ disk_percent }} % utilisés)</div>
+        <div class="jauge-ligne"><div class="progress"><div class="progress-bar{% if disk_percent > 90 %} warn{% endif %}" style="width: {{ disk_percent|unlocalize }}%"></div></div></div>
     </div>
-
-    <!-- CPU -->
-    <div class="perf-card cpu">
-        <div class="perf-label">🖥️ Charge CPU</div>
-        <div class="perf-value">
-            {{ cpu_percent|floatformat:1 }} <small>%</small>
-        </div>
-        <div class="perf-sub">{{ cpu_count }} cœur{{ cpu_count|pluralize }} disponible{{ cpu_count|pluralize }}</div>
-        <div class="gauge">
-            <div class="gauge-fill {% if cpu_percent > 85 %}gauge-red{% elif cpu_percent > 60 %}gauge-orange{% else %}gauge-blue{% endif %}"
-                 style="width:{{ cpu_percent }}%;"></div>
-        </div>
-    </div>
-
-    <!-- RAM -->
-    <div class="perf-card ram">
-        <div class="perf-label">🧠 Mémoire RAM</div>
-        <div class="perf-value">
-            {{ ram_percent|floatformat:1 }} <small>%</small>
-        </div>
-        <div class="perf-sub">{{ ram_used_gb }} GB / {{ ram_total_gb }} GB utilisés</div>
-        <div class="gauge">
-            <div class="gauge-fill {% if ram_percent > 85 %}gauge-red{% elif ram_percent > 70 %}gauge-orange{% else %}gauge-purple{% endif %}"
-                 style="width:{{ ram_percent }}%;"></div>
-        </div>
-    </div>
-
-    <!-- Charge système -->
-    <div class="perf-card perf">
-        <div class="perf-label">📊 Charge système (load avg)</div>
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:8px;">
-            <div style="text-align:center;">
-                <div style="font-size:1.3rem;font-weight:800;color:var(--text-dark);">{{ load1 }}</div>
-                <div class="perf-sub">1 min</div>
-            </div>
-            <div style="text-align:center;">
-                <div style="font-size:1.3rem;font-weight:800;color:var(--text-dark);">{{ load5 }}</div>
-                <div class="perf-sub">5 min</div>
-            </div>
-            <div style="text-align:center;">
-                <div style="font-size:1.3rem;font-weight:800;color:var(--text-dark);">{{ load15 }}</div>
-                <div class="perf-sub">15 min</div>
-            </div>
-        </div>
+    <div class="chiffre">
+        <div class="chiffre-valeur">{{ load1 }} · {{ load5 }} · {{ load15 }}</div>
+        <div class="chiffre-libelle">Charge moyenne (1, 5 et 15 min)</div>
     </div>
 </div>
 
-<!-- Graphique heures de pointe -->
-<div class="chart-container animate-in">
-    <div class="chart-title">📊 Activité des uploads par heure</div>
-    <div class="bars">
-        {% for label in heures_labels %}
-            {% with index=forloop.counter0 %}
-            {% with value=heures_data|slice:index|last %}
-            <div class="bar-wrap">
-                <div class="bar-value">{{ value }}</div>
-                <div class="bar {% if index == heure_pointe %}peak{% endif %}"
-                     style="height:{% widthratio value 1 1 %}px; min-height: 3px; {% if value > 0 %}height: calc({{ value }} * 100% / {{ heure_pointe_valeur }});{% else %}height: 3px;{% endif %}">
-                </div>
-                <div class="bar-label">{{ label }}</div>
-            </div>
-            {% endwith %}
-            {% endwith %}
-        {% endfor %}
+<div class="panneau chiffres">
+    <div class="chiffre">
+        <div class="chiffre-valeur">{% if temps_moyen > 0 %}{{ temps_moyen|floatformat:2 }} s{% else %}—{% endif %}</div>
+        <div class="chiffre-libelle">Durée moyenne d'un dépôt ({{ nb_fichiers_chronometres }} mesuré{{ nb_fichiers_chronometres|pluralize }})</div>
     </div>
-    <div class="peak-info">
-        <div class="peak-stat">
-            <div class="peak-stat-num">{{ heure_pointe_valeur }}</div>
-            <div class="peak-stat-lbl">Uploads max en 1h</div>
-        </div>
-        {% if heure_pointe is not None %}
-        <div class="peak-stat">
-            <div class="peak-stat-num">{{ heure_pointe }}h</div>
-            <div class="peak-stat-lbl">Heure de pointe</div>
-        </div>
-        {% endif %}
-        <div class="peak-stat">
-            <div class="peak-stat-num">{{ nb_fichiers_chronometres }}</div>
-            <div class="peak-stat-lbl">Fichiers chronométrés</div>
-        </div>
+    <div class="chiffre">
+        <div class="chiffre-valeur">{% if heure_pointe is not None %}{{ heure_pointe }} h{% else %}—{% endif %}</div>
+        <div class="chiffre-libelle">Heure de pointe ({{ heure_pointe_valeur }} dépôt{{ heure_pointe_valeur|pluralize }})</div>
+    </div>
+    <div class="chiffre">
+        <div class="chiffre-valeur">{{ taille_stockage_gb }} Go</div>
+        <div class="chiffre-libelle">Occupés par les fichiers déposés</div>
     </div>
 </div>
 
-<!-- Stockage -->
-<div class="chart-container animate-in">
-    <div class="chart-title">💾 Stockage global</div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1.5rem;">
-        <div style="text-align:center;">
-            <div style="font-size:2rem;font-weight:800;color:var(--edc-blue);">{{ taille_stockage_gb }} GB</div>
-            <div class="perf-sub">Fichiers uploadés</div>
-        </div>
-        <div style="text-align:center;">
-            <div style="font-size:2rem;font-weight:800;color:#22c55e;">{{ disk_free_gb }} GB</div>
-            <div class="perf-sub">Espace libre</div>
-        </div>
-        <div style="text-align:center;">
-            <div style="font-size:2rem;font-weight:800;color:#a855f7;">{{ disk_used_gb }} GB</div>
-            <div class="perf-sub">Espace total utilisé</div>
-        </div>
+<div class="panneau">
+    <div class="panneau-entete"><h2>Dépôts par heure de la journée</h2></div>
+    {% if heure_pointe is not None %}
+    <div class="histogramme" role="img" aria-label="Nombre de dépôts pour chaque heure de la journée">
+        {% for h in heures %}<div class="{% if forloop.counter0 == heure_pointe %}pointe{% endif %}" style="height: {{ h.pourcent|unlocalize }}%" title="{{ h.label }} : {{ h.valeur }} dépôt{{ h.valeur|pluralize }}"></div>{% endfor %}
     </div>
+    <div class="histogramme-axe">
+        {% for h in heures %}<span>{% if forloop.counter0|divisibleby:3 %}{{ h.label }}{% endif %}</span>{% endfor %}
+    </div>
+    {% else %}
+    <div class="vide"><p>Aucun dépôt enregistré pour le moment.</p></div>
+    {% endif %}
 </div>
-
 {% endblock %}
 
 {% block extra_js %}
 <script>
-// Auto-refresh toutes les 30 secondes
-setTimeout(() => { window.location.reload(); }, 30000);
+setTimeout(function () { window.location.reload(); }, 30000);
 </script>
 {% endblock %}

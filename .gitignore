@@ -41,3 +41,6 @@ ENV/
 Thumbs.db
 *.swp
 *~
+
+# Jeton de lecture des métriques par Prometheus
+monitoring/prometheus/metrics_token

@@ -8,7 +8,6 @@ done
 echo "✅ PostgreSQL prêt."
 
 echo "🔄 Migrations..."
-python manage.py makemigrations partage --noinput || true
 python manage.py migrate --noinput
 
 echo "📦 Collecte des fichiers statiques..."
@@ -28,4 +27,4 @@ else:
 PYEOF
 
 echo "🚀 Lancement de Gunicorn..."
-exec gunicorn projet.wsgi:application --bind 0.0.0.0:8000 --workers 3 --timeout 120
+exec gunicorn projet.wsgi:application --bind 0.0.0.0:8000 --workers 3 --timeout 900

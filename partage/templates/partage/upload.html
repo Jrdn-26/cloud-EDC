@@ -1,80 +1,67 @@
 {% extends 'partage/base.html' %}
-{% block titre %}Uploader — Cloud EDC{% endblock %}
-{% block extra_css %}
-<style>
-.upload-wrapper { max-width: 680px; margin: 0 auto; }
-.page-title { font-size: 1.4rem; font-weight: 800; color: var(--edc-blue); }
-.page-sub   { font-size: 0.83rem; color: var(--text-muted); margin-top: 3px; margin-bottom: 1.4rem; }
-.quota-mini { background: #E6F0FF; border: 1px solid #B8D0F0; border-radius: var(--radius-sm); padding: 10px 14px; margin-bottom: 1.4rem; font-size: 0.83rem; color: var(--edc-blue); display: flex; align-items: center; gap: 8px; font-weight: 600; }
-.upload-tabs { display: flex; gap: 0; border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; margin-bottom: 1.4rem; }
-.upload-tab { flex: 1; padding: 10px 16px; background: var(--light); border: none; cursor: pointer; font-family: inherit; font-size: 0.875rem; font-weight: 600; color: var(--text-muted); transition: all 0.2s; text-align: center; }
-.upload-tab.active { background: var(--edc-blue); color: white; }
-.upload-tab:not(.active):hover { background: var(--light2); color: var(--edc-blue); }
-.dropzone { border: 2px dashed var(--border); border-radius: var(--radius); padding: 3rem 2rem; text-align: center; cursor: pointer; transition: all 0.3s; background: var(--light); position: relative; margin-bottom: 1.2rem; }
-.dropzone:hover, .dropzone.drag-over { border-color: var(--edc-blue-mid); background: #EEF4FF; }
-.dropzone input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
-.dz-icon  { font-size: 3rem; margin-bottom: 0.8rem; }
-.dz-title { font-size: 1rem; font-weight: 700; color: var(--text-dark); margin-bottom: 0.4rem; }
-.dz-sub   { font-size: 0.82rem; color: var(--text-muted); }
-.file-list { background: white; border: 1px solid var(--border-light); border-radius: var(--radius-sm); margin-bottom: 1.2rem; max-height: 240px; overflow-y: auto; display: none; }
-.file-list-header { padding: 8px 14px; background: var(--light); border-bottom: 1px solid var(--border-light); font-size: 0.78rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; display: flex; justify-content: space-between; }
-.file-item { display: flex; align-items: center; gap: 10px; padding: 8px 14px; border-bottom: 1px solid var(--border-light); font-size: 0.83rem; }
-.file-item:last-child { border-bottom: none; }
-.file-item-icon { font-size: 1.1rem; flex-shrink: 0; }
-.file-item-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.file-item-size { color: var(--text-muted); font-size: 0.78rem; white-space: nowrap; }
-.ext-list { background: #FFF8E6; border: 1px solid #FCDFA0; border-radius: var(--radius-sm); padding: 10px 14px; margin-bottom: 1.2rem; font-size: 0.8rem; color: #8A5300; }
-.ext-list strong { display: block; margin-bottom: 4px; }
-</style>
-{% endblock %}
-
+{% load interface %}
+{% block titre %}Déposer des fichiers — Cloud EDC{% endblock %}
 {% block contenu %}
-<div class="upload-wrapper animate-in">
-    <a href="{% url 'mes_fichiers' %}" class="btn btn-secondary btn-sm" style="margin-bottom:0.8rem;">← Retour</a>
-    <div class="page-title">⬆ Uploader</div>
-    <div class="page-sub">Vos fichiers seront scannés par l'antivirus et chiffrés automatiquement.</div>
-
-    <div class="quota-mini">
-        💾 <strong>{{ profil.espace_utilise_mb }} MB / {{ profil.quota_gb }} GB</strong>
-        utilisés &nbsp;·&nbsp; {{ profil.pourcentage_utilise }}% &nbsp;·&nbsp;
-        Libre : {{ profil.espace_libre|filesizeformat }}
+<div class="formulaire-etroit">
+    <a href="{% url 'mes_fichiers' %}" class="retour">{% icone "arrow-left" "ic-sm" %}Mes fichiers</a>
+    <div class="titre-page">
+        <div>
+            <h1>Déposer des fichiers</h1>
+            <p>Espace utilisé : {{ profil.espace_utilise_mb }} Mo sur {{ profil.quota_gb }} Go ({{ profil.pourcentage_utilise }} %). Disponible : {{ profil.espace_libre|filesizeformat }}.</p>
+        </div>
     </div>
 
-    <div class="card" style="padding:1.8rem;">
-        <div class="upload-tabs">
-            <button type="button" class="upload-tab active" onclick="setMode('fichiers', this)">📄 Fichiers multiples</button>
-            <button type="button" class="upload-tab" onclick="setMode('dossier', this)">📁 Dossier entier</button>
+    <div class="card">
+        <div class="choix-mode" role="group" aria-label="Type de dépôt">
+            <button type="button" aria-pressed="true" data-mode="fichiers">Fichiers</button>
+            <button type="button" aria-pressed="false" data-mode="dossier">Dossier complet</button>
         </div>
 
         <form method="post" enctype="multipart/form-data" id="upload-form">
             {% csrf_token %}
-            <div class="dropzone" id="dropzone">
-                <input type="file" name="fichiers" id="file-input" multiple onchange="onSelect(this)">
-                <div id="dz-content">
-                    <div class="dz-icon" id="dz-icon">📂</div>
-                    <div class="dz-title" id="dz-title">Glissez vos fichiers ici</div>
-                    <div class="dz-sub" id="dz-sub">ou cliquez pour parcourir · Aucune limite de taille</div>
+            <div class="zone-depot" id="zone-depot">
+                <input type="file" name="fichiers" id="file-input" multiple aria-describedby="zone-texte">
+                {% icone "upload" %}
+                <div id="zone-texte">
+                    <strong id="zone-titre">Glissez vos fichiers ici</strong>
+                    <span id="zone-sous-titre">ou cliquez pour les sélectionner</span>
                 </div>
             </div>
 
-            <div class="file-list" id="file-list">
-                <div class="file-list-header">
-                    <span id="file-count">0 fichier(s)</span>
-                    <span id="total-size">0 MB</span>
+            <div class="liste-selection" id="liste-selection" hidden>
+                <div class="liste-selection-entete"><span id="nb-fichiers"></span><span id="taille-totale"></span></div>
+                <div id="lignes"></div>
+            </div>
+
+            <div class="progression" id="progression" hidden aria-live="polite">
+                <div class="progression-entete">
+                    <strong id="progression-etape">Envoi des fichiers</strong>
+                    <span id="progression-pourcent">0 %</span>
                 </div>
-                <div id="file-items"></div>
+                <div class="progress progress-depot" role="progressbar" aria-labelledby="progression-etape"
+                     aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="progression-barre">
+                    <div class="progress-bar" id="progression-remplissage" style="width: 0%"></div>
+                </div>
+                <div class="progression-detail">
+                    <span id="progression-octets"></span>
+                    <span id="progression-temps"></span>
+                </div>
+                <p class="form-aide" id="progression-aide">Ne fermez pas cette page pendant l'envoi.</p>
             </div>
 
-            <div class="ext-list" style="background:#E6F9F2;border-color:#B3EDD8;color:#2D6A4F;">
-                <strong>✅ Extensions autorisées :</strong>
-                {% for ext in extensions_ok %}.{{ ext }}{% if not forloop.last %} &nbsp;·&nbsp; {% endif %}{% endfor %}
-            </div>
-            <div class="ext-list" style="background:#FFF8E6;border-color:#FCDFA0;color:#8A5300;">
-                <strong>💾 Taille maximale :</strong> {{ profil.taille_max_fichier_mb }} MB par fichier
-                <span style="font-size:0.75rem;">(fixée par l'administrateur)</span>
-            </div>
+            <dl class="regles">
+                <dt>Taille maximale</dt>
+                <dd>{{ taille_max_mb }} Mo par fichier</dd>
+                <dt>Formats acceptés</dt>
+                <dd>{% for ext in extensions_ok %}{{ ext }}{% if not forloop.last %}, {% endif %}{% endfor %}</dd>
+                <dt>Traitement</dt>
+                <dd>Chaque fichier est analysé par l'antivirus puis chiffré avant d'être enregistré. Un fichier refusé n'est pas conservé.</dd>
+            </dl>
 
-            <button type="submit" class="btn btn-primary btn-block btn-lg" id="submit-btn" disabled>⬆ Uploader et sécuriser</button>
+            <div class="actions">
+                <button type="submit" class="btn btn-orange btn-lg" id="submit-btn" disabled>Déposer</button>
+                <button type="button" class="btn btn-secondary btn-lg" id="annuler-btn" hidden>Annuler l'envoi</button>
+            </div>
         </form>
     </div>
 </div>
@@ -82,85 +69,197 @@
 
 {% block extra_js %}
 <script>
-let modeActuel = 'fichiers';
+(function () {
+    var champ = document.getElementById('file-input');
+    var zone = document.getElementById('zone-depot');
+    var bouton = document.getElementById('submit-btn');
+    var liste = document.getElementById('liste-selection');
+    var lignes = document.getElementById('lignes');
 
-function setMode(mode, btn) {
-    modeActuel = mode;
-    document.querySelectorAll('.upload-tab').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    const input = document.getElementById('file-input');
-    if (mode === 'dossier') {
-        input.setAttribute('webkitdirectory', '');
-        input.setAttribute('directory', '');
-        input.removeAttribute('multiple');
-        document.getElementById('dz-icon').textContent  = '📁';
-        document.getElementById('dz-title').textContent = 'Glissez un dossier ici';
-        document.getElementById('dz-sub').textContent   = 'ou cliquez pour sélectionner un dossier';
-    } else {
-        input.removeAttribute('webkitdirectory');
-        input.removeAttribute('directory');
-        input.setAttribute('multiple', '');
-        document.getElementById('dz-icon').textContent  = '📂';
-        document.getElementById('dz-title').textContent = 'Glissez vos fichiers ici';
-        document.getElementById('dz-sub').textContent   = 'ou cliquez pour parcourir · Aucune limite de taille';
+    function taille(octets) {
+        if (octets === 0) return '0 o';
+        var unites = ['o', 'Ko', 'Mo', 'Go', 'To'];
+        var i = Math.floor(Math.log(octets) / Math.log(1024));
+        return (octets / Math.pow(1024, i)).toFixed(1).replace('.', ',') + ' ' + unites[i];
     }
-    input.value = '';
-    document.getElementById('file-list').style.display = 'none';
-    document.getElementById('submit-btn').disabled = true;
-}
 
-function onSelect(input) {
-    if (!input.files || input.files.length === 0) return;
-    const files    = Array.from(input.files);
-    const fileList = document.getElementById('file-list');
-    const items    = document.getElementById('file-items');
-    const count    = document.getElementById('file-count');
-    const totalSz  = document.getElementById('total-size');
-    const totalBytes = files.reduce((acc, f) => acc + f.size, 0);
-    count.textContent   = `${files.length} fichier${files.length > 1 ? 's' : ''}`;
-    totalSz.textContent = formatSize(totalBytes);
-    items.innerHTML = '';
-    files.forEach(f => {
-        const ext  = f.name.split('.').pop().toLowerCase();
-        const icon = getIcon(ext);
-        const div  = document.createElement('div');
-        div.className = 'file-item';
-        div.innerHTML = `<span class="file-item-icon">${icon}</span><span class="file-item-name" title="${f.name}">${f.name}</span><span class="file-item-size">${formatSize(f.size)}</span>`;
-        items.appendChild(div);
+    function pluriel(n) { return n + ' fichier' + (n > 1 ? 's' : ''); }
+
+    function afficherSelection() {
+        var fichiers = Array.prototype.slice.call(champ.files || []);
+        lignes.textContent = '';
+        if (fichiers.length === 0) {
+            liste.hidden = true;
+            bouton.disabled = true;
+            bouton.textContent = 'Déposer';
+            return;
+        }
+        var total = 0;
+        fichiers.forEach(function (f) {
+            total += f.size;
+            var ligne = document.createElement('div');
+            ligne.className = 'liste-selection-ligne';
+            var nom = document.createElement('span');
+            nom.textContent = f.webkitRelativePath || f.name;
+            nom.title = nom.textContent;
+            var t = document.createElement('span');
+            t.textContent = taille(f.size);
+            ligne.appendChild(nom);
+            ligne.appendChild(t);
+            lignes.appendChild(ligne);
+        });
+        document.getElementById('nb-fichiers').textContent = pluriel(fichiers.length);
+        document.getElementById('taille-totale').textContent = taille(total);
+        liste.hidden = false;
+        bouton.disabled = false;
+        bouton.textContent = 'Déposer ' + pluriel(fichiers.length);
+    }
+
+    document.querySelectorAll('.choix-mode button').forEach(function (b) {
+        b.addEventListener('click', function () {
+            document.querySelectorAll('.choix-mode button').forEach(function (x) { x.setAttribute('aria-pressed', 'false'); });
+            b.setAttribute('aria-pressed', 'true');
+            var dossier = b.dataset.mode === 'dossier';
+            if (dossier) {
+                champ.setAttribute('webkitdirectory', '');
+                champ.removeAttribute('multiple');
+            } else {
+                champ.removeAttribute('webkitdirectory');
+                champ.setAttribute('multiple', '');
+            }
+            document.getElementById('zone-titre').textContent = dossier ? 'Glissez un dossier ici' : 'Glissez vos fichiers ici';
+            document.getElementById('zone-sous-titre').textContent = dossier ? 'ou cliquez pour le sélectionner' : 'ou cliquez pour les sélectionner';
+            champ.value = '';
+            afficherSelection();
+        });
     });
-    fileList.style.display = 'block';
-    document.getElementById('submit-btn').disabled = false;
-    document.getElementById('submit-btn').textContent = `⬆ Uploader ${files.length} fichier${files.length > 1 ? 's' : ''}`;
-}
 
-function formatSize(bytes) {
-    if (bytes === 0) return '0 B';
-    const units = ['B','KB','MB','GB','TB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(1024));
-    return (bytes / Math.pow(1024, i)).toFixed(1) + ' ' + units[i];
-}
+    champ.addEventListener('change', afficherSelection);
+    zone.addEventListener('dragover', function (e) { e.preventDefault(); zone.classList.add('survol'); });
+    zone.addEventListener('dragleave', function () { zone.classList.remove('survol'); });
+    zone.addEventListener('drop', function (e) {
+        e.preventDefault();
+        zone.classList.remove('survol');
+        champ.files = e.dataTransfer.files;
+        afficherSelection();
+    });
 
-function getIcon(ext) {
-    const map = { pdf:'📄', doc:'📝', docx:'📝', xls:'📊', xlsx:'📊', ppt:'📊', pptx:'📊', jpg:'🖼️', jpeg:'🖼️', png:'🖼️', gif:'🖼️', mp4:'🎬', avi:'🎬', mp3:'🎵', wav:'🎵', zip:'📦', rar:'📦', '7z':'📦', txt:'📃', csv:'📊' };
-    return map[ext] || '📁';
-}
+    // ── Envoi en arrière-plan avec barre de progression ──────────────────
+    // Étape 1 : transfert vers le serveur (pourcentage réel, mesuré par le navigateur).
+    // Étape 2 : analyse antivirus et chiffrement sur le serveur (durée inconnue :
+    //           barre animée sans pourcentage). Le serveur répond ensuite par
+    //           l'adresse de la page à afficher, avec ses messages.
+    var formulaire = document.getElementById('upload-form');
+    var progression = document.getElementById('progression');
+    var etape = document.getElementById('progression-etape');
+    var pourcent = document.getElementById('progression-pourcent');
+    var barre = document.getElementById('progression-barre');
+    var remplissage = document.getElementById('progression-remplissage');
+    var octets = document.getElementById('progression-octets');
+    var temps = document.getElementById('progression-temps');
+    var aide = document.getElementById('progression-aide');
+    var annuler = document.getElementById('annuler-btn');
+    var requete = null;
 
-const dz = document.getElementById('dropzone');
-dz.addEventListener('dragover',  e => { e.preventDefault(); dz.classList.add('drag-over'); });
-dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
-dz.addEventListener('drop', e => {
-    e.preventDefault(); dz.classList.remove('drag-over');
-    const inp = document.getElementById('file-input');
-    inp.files = e.dataTransfer.files;
-    onSelect(inp);
-});
+    function duree(secondes) {
+        if (!isFinite(secondes) || secondes < 0) return '';
+        if (secondes < 60) return Math.ceil(secondes) + ' s';
+        return Math.floor(secondes / 60) + ' min ' + String(Math.ceil(secondes % 60)).padStart(2, '0') + ' s';
+    }
 
-document.getElementById('upload-form').addEventListener('submit', () => {
-    const btn = document.getElementById('submit-btn');
-    const n   = document.getElementById('file-input').files.length;
-    btn.textContent = `⏳ Scan & chiffrement de ${n} fichier${n > 1 ? 's' : ''} en cours…`;
-    btn.disabled = true;
-    btn.style.opacity = '0.75';
-});
+    function verrouiller(oui) {
+        bouton.disabled = oui;
+        champ.disabled = oui;
+        document.querySelectorAll('.choix-mode button').forEach(function (b) { b.disabled = oui; });
+        zone.classList.toggle('desactivee', oui);
+    }
+
+    function echec(message) {
+        requete = null;
+        verrouiller(false);
+        annuler.hidden = true;
+        barre.classList.remove('indeterminee');
+        progression.classList.add('en-erreur');
+        etape.textContent = message;
+        pourcent.textContent = '';
+        temps.textContent = '';
+        aide.textContent = 'Vous pouvez réessayer.';
+        bouton.textContent = 'Réessayer';
+        window.removeEventListener('beforeunload', prevenir);
+    }
+
+    function prevenir(e) { e.preventDefault(); e.returnValue = ''; }
+
+    formulaire.addEventListener('submit', function (e) {
+        if (!window.XMLHttpRequest || !window.FormData) return; // ancien navigateur : envoi classique
+        e.preventDefault();
+        var donnees = new FormData(formulaire);
+        var debut = Date.now();
+
+        requete = new XMLHttpRequest();
+        requete.open('POST', formulaire.action || window.location.href);
+        requete.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+
+        requete.upload.addEventListener('progress', function (ev) {
+            if (!ev.lengthComputable) return;
+            var p = Math.min(100, Math.round(ev.loaded / ev.total * 100));
+            remplissage.style.width = p + '%';
+            barre.setAttribute('aria-valuenow', p);
+            pourcent.textContent = p + ' %';
+            octets.textContent = taille(ev.loaded) + ' sur ' + taille(ev.total);
+            var ecoule = (Date.now() - debut) / 1000;
+            if (ecoule > 1 && ev.loaded > 0) {
+                var debit = ev.loaded / ecoule;
+                temps.textContent = taille(debit) + '/s · reste ' + duree((ev.total - ev.loaded) / debit);
+            }
+        });
+
+        requete.upload.addEventListener('load', function () {
+            // Tout est transféré : le serveur analyse et chiffre maintenant.
+            etape.textContent = 'Analyse antivirus et chiffrement en cours…';
+            bouton.textContent = 'Traitement en cours…';
+            pourcent.textContent = '';
+            temps.textContent = '';
+            barre.classList.add('indeterminee');
+            barre.removeAttribute('aria-valuenow');
+            annuler.hidden = true;
+            aide.textContent = "Les gros fichiers peuvent demander une à deux minutes. Ne fermez pas cette page.";
+        });
+
+        requete.addEventListener('load', function () {
+            window.removeEventListener('beforeunload', prevenir);
+            if (requete.status === 200) {
+                try {
+                    window.location.href = JSON.parse(requete.responseText).redirection;
+                    return;
+                } catch (err) { /* réponse inattendue : traitée plus bas */ }
+            }
+            if (requete.status === 429) return echec('Trop de dépôts en peu de temps. Réessayez dans quelques minutes.');
+            if (requete.status === 413) return echec('Envoi refusé : la taille totale dépasse la limite du serveur.');
+            if (requete.status === 403) return echec('Session expirée. Rechargez la page et reconnectez-vous.');
+            echec("L'envoi a échoué (erreur " + requete.status + ').');
+        });
+        requete.addEventListener('error', function () { echec('Connexion au serveur interrompue.'); });
+        requete.addEventListener('abort', function () { echec('Envoi annulé.'); });
+
+        progression.hidden = false;
+        progression.scrollIntoView({block: 'center'});
+        progression.classList.remove('en-erreur');
+        barre.classList.remove('indeterminee');
+        remplissage.style.width = '0%';
+        etape.textContent = 'Envoi des fichiers';
+        pourcent.textContent = '0 %';
+        octets.textContent = '';
+        temps.textContent = '';
+        aide.textContent = "Ne fermez pas cette page pendant l'envoi.";
+        verrouiller(true);
+        bouton.textContent = 'Envoi en cours…';
+        annuler.hidden = false;
+        window.addEventListener('beforeunload', prevenir);
+        requete.send(donnees);
+    });
+
+    annuler.addEventListener('click', function () { if (requete) requete.abort(); });
+})();
 </script>
 {% endblock %}
